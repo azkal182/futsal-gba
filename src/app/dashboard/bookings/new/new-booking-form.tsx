@@ -4,103 +4,153 @@ import { useState, useEffect, useActionState } from 'react'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { id as localeId } from 'date-fns/locale'
-import { createBooking, getAvailableSlots } from '@/actions/bookings'
-import { formatCurrency, TIME_SLOTS } from '@/lib/constants'
+import { createConfirmedBooking, getBookedSlots } from '@/actions/bookings'
+import { formatCurrency } from '@/lib/constants'
+import type { Field } from '@/types'
+import type { TimeSlot } from '@/generated/prisma/client'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Calendar } from '@/components/ui/calendar'
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select'
-import {
-    Popover,
-    PopoverContent,
-    PopoverTrigger,
-} from '@/components/ui/popover'
-import { CalendarIcon, Loader2, Clock } from 'lucide-react'
-import { toast } from 'sonner'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { CalendarIcon, Loader2, CheckCircle, MapPin, Clock, User, Phone, Sunrise, Sun, Sunset } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { Field, TimeSlot } from '@/types'
+import { toast } from 'sonner'
 
 interface NewBookingFormProps {
     fields: Field[]
+    timeSlots: TimeSlot[]
 }
 
-export function NewBookingForm({ fields }: NewBookingFormProps) {
+// Helper function to generate hours from time slot
+function generateHoursFromSlot(startTime: string, endTime: string): string[] {
+    const [startHour] = startTime.split(':').map(Number)
+    const [endHour] = endTime.split(':').map(Number)
+    const hours: string[] = []
+    for (let h = startHour; h < endHour; h++) {
+        hours.push(`${h.toString().padStart(2, '0')}:00`)
+    }
+    return hours
+}
+
+// Get all hours from all time slots
+function getAllHours(slots: TimeSlot[]): string[] {
+    const allHours: string[] = []
+    slots.forEach(slot => {
+        const hours = generateHoursFromSlot(slot.startTime, slot.endTime)
+        allHours.push(...hours)
+    })
+    return [...new Set(allHours)].sort()
+}
+
+// Category icons
+const CATEGORY_ICONS: Record<string, React.ReactNode> = {
+    'pagi': <Sunrise className="w-4 h-4" />,
+    'siang': <Sun className="w-4 h-4" />,
+    'sore': <Sunset className="w-4 h-4" />,
+}
+
+function getCategoryIcon(name: string): React.ReactNode {
+    const key = name.toLowerCase()
+    return CATEGORY_ICONS[key] || <Clock className="w-4 h-4" />
+}
+
+export function NewBookingForm({ fields, timeSlots }: NewBookingFormProps) {
     const router = useRouter()
-    const [selectedField, setSelectedField] = useState<Field | null>(null)
+    const [state, formAction, isPending] = useActionState(createConfirmedBooking, null)
+
+    const [selectedField, setSelectedField] = useState<string>('')
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined)
     const [selectedStartTime, setSelectedStartTime] = useState<string>('')
     const [selectedEndTime, setSelectedEndTime] = useState<string>('')
-    const [availableSlots, setAvailableSlots] = useState<TimeSlot[]>([])
-    const [isLoadingSlots, setIsLoadingSlots] = useState(false)
-    const [state, formAction, isPending] = useActionState(createBooking, null)
+    const [bookedSlots, setBookedSlots] = useState<string[]>([])
+    const [loadingSlots, setLoadingSlots] = useState(false)
 
-    // Calculate price
+    const allHours = getAllHours(timeSlots)
+    const currentField = fields.find(f => f.id === selectedField)
+
+    // Load booked slots when field or date changes
+    useEffect(() => {
+        async function loadBookedSlots() {
+            if (selectedField && selectedDate) {
+                setLoadingSlots(true)
+                setSelectedStartTime('')
+                setSelectedEndTime('')
+                try {
+                    const slots = await getBookedSlots(selectedField, selectedDate)
+                    setBookedSlots(slots)
+                } catch (error) {
+                    console.error('Failed to load booked slots:', error)
+                    setBookedSlots([])
+                } finally {
+                    setLoadingSlots(false)
+                }
+            }
+        }
+        loadBookedSlots()
+    }, [selectedField, selectedDate])
+
+    // Redirect on success
+    useEffect(() => {
+        if (state?.success) {
+            toast.success('Booking berhasil dibuat')
+            router.push('/dashboard/bookings')
+        } else if (state?.success === false) {
+            toast.error(state.error)
+        }
+    }, [state, router])
+
+    // Select start time
+    const selectStartTime = (slot: string) => {
+        if (bookedSlots.includes(slot)) return
+        setSelectedStartTime(slot)
+        setSelectedEndTime('')
+    }
+
+    // Get valid end times based on start time
+    const getValidEndTimes = (): string[] => {
+        if (!selectedStartTime) return []
+
+        const startIndex = allHours.indexOf(selectedStartTime)
+        if (startIndex === -1) return []
+
+        const validEndTimes: string[] = []
+
+        // Find consecutive available slots
+        for (let i = startIndex; i < allHours.length; i++) {
+            const currentSlot = allHours[i]
+
+            // If this slot is booked and it's not the start slot, stop
+            if (bookedSlots.includes(currentSlot) && i > startIndex) break
+
+            // Add end time (next hour)
+            const [hour] = currentSlot.split(':').map(Number)
+            const endTime = `${(hour + 1).toString().padStart(2, '0')}:00`
+            validEndTimes.push(endTime)
+        }
+
+        return validEndTimes
+    }
+
     const calculatePrice = () => {
-        if (!selectedField || !selectedStartTime || !selectedEndTime) return 0
+        if (!currentField || !selectedStartTime || !selectedEndTime) return 0
 
         const [startHour] = selectedStartTime.split(':').map(Number)
         const [endHour] = selectedEndTime.split(':').map(Number)
         const duration = endHour - startHour
 
         if (duration <= 0) return 0
-        return selectedField.pricePerHour * duration
+        return currentField.pricePerHour * duration
     }
 
-    const totalPrice = calculatePrice()
-    const duration = selectedStartTime && selectedEndTime
-        ? parseInt(selectedEndTime.split(':')[0]) - parseInt(selectedStartTime.split(':')[0])
-        : 0
-
-    // Load available slots when field and date change
-    useEffect(() => {
-        if (selectedField && selectedDate) {
-            setIsLoadingSlots(true)
-            getAvailableSlots(selectedField.id, selectedDate)
-                .then(setAvailableSlots)
-                .finally(() => setIsLoadingSlots(false))
-        } else {
-            setAvailableSlots([])
-        }
-        setSelectedStartTime('')
-        setSelectedEndTime('')
-    }, [selectedField, selectedDate])
-
-    // Get valid end times based on start time
-    const getValidEndTimes = () => {
-        if (!selectedStartTime) return []
-
-        const startIndex = TIME_SLOTS.indexOf(selectedStartTime)
-        if (startIndex === -1) return []
-
-        // Find consecutive available slots
-        const validEndTimes: string[] = []
-        for (let i = startIndex + 1; i < TIME_SLOTS.length; i++) {
-            const slot = availableSlots.find((s) => s.time === TIME_SLOTS[i - 1])
-            if (!slot?.available && i > startIndex + 1) break
-
-            // Calculate end time (add 1 hour to slot time)
-            const [hour] = TIME_SLOTS[i].split(':').map(Number)
-            validEndTimes.push(`${hour.toString().padStart(2, '0')}:00`)
-        }
-
-        // Add last possible slot
-        const lastSlotIndex = availableSlots.findIndex((s, idx) =>
-            idx >= startIndex && !s.available
-        )
-
-        if (lastSlotIndex === -1) {
-            validEndTimes.push('22:00')
-        }
-
-        return [...new Set(validEndTimes)]
+    const getDuration = () => {
+        if (!selectedStartTime || !selectedEndTime) return 0
+        const [startHour] = selectedStartTime.split(':').map(Number)
+        const [endHour] = selectedEndTime.split(':').map(Number)
+        return endHour - startHour
     }
 
     const handleSubmit = async (formData: FormData) => {
@@ -109,224 +159,322 @@ export function NewBookingForm({ fields }: NewBookingFormProps) {
             return
         }
 
-        formData.set('fieldId', selectedField.id)
+        formData.set('fieldId', selectedField)
         formData.set('date', format(selectedDate, 'yyyy-MM-dd'))
         formData.set('startTime', selectedStartTime)
         formData.set('endTime', selectedEndTime)
 
-        const result = await createBooking(null, formData)
-
-        if (result.success) {
-            toast.success('Booking berhasil dibuat')
-            router.push('/dashboard/bookings')
-        } else {
-            toast.error(result.error)
-        }
+        formAction(formData)
     }
 
     return (
-        <form action={handleSubmit} className="space-y-6">
-            {/* Field Selection */}
-            <div className="space-y-2">
-                <Label>Lapangan</Label>
-                <Select
-                    value={selectedField?.id ?? ''}
-                    onValueChange={(value) => {
-                        const field = fields.find((f) => f.id === value)
-                        setSelectedField(field ?? null)
-                    }}
-                >
-                    <SelectTrigger>
-                        <SelectValue placeholder="Pilih lapangan" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {fields.map((field) => (
-                            <SelectItem key={field.id} value={field.id}>
-                                {field.name} - {formatCurrency(field.pricePerHour)}/jam
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-            </div>
-
-            {/* Date Selection */}
-            <div className="space-y-2">
-                <Label>Tanggal</Label>
-                <Popover>
-                    <PopoverTrigger asChild>
-                        <Button
-                            variant="outline"
-                            className={cn(
-                                'w-full justify-start text-left font-normal',
-                                !selectedDate && 'text-muted-foreground'
-                            )}
-                        >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {selectedDate
-                                ? format(selectedDate, 'EEEE, d MMMM yyyy', { locale: localeId })
-                                : 'Pilih tanggal'}
-                        </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                            mode="single"
-                            selected={selectedDate}
-                            onSelect={setSelectedDate}
-                            disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
-                            initialFocus
-                        />
-                    </PopoverContent>
-                </Popover>
-            </div>
-
-            {/* Time Selection */}
-            {selectedField && selectedDate && (
-                <div className="space-y-4">
-                    <Label>Waktu</Label>
-
-                    {isLoadingSlots ? (
-                        <div className="flex items-center gap-2 text-gray-500">
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            Memuat slot waktu...
+        <form action={handleSubmit}>
+            <div className="space-y-6">
+                {/* Step 1: Select Field */}
+                <Card className="border-0 shadow-lg">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900 flex items-center justify-center text-emerald-600 dark:text-emerald-400 font-bold text-sm">
+                                1
+                            </div>
+                            Pilih Lapangan
+                        </CardTitle>
+                        <CardDescription>Pilih lapangan yang ingin dipesan</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {fields.map((field) => (
+                                <button
+                                    key={field.id}
+                                    type="button"
+                                    onClick={() => setSelectedField(field.id)}
+                                    className={cn(
+                                        'p-4 rounded-xl border-2 text-left transition-all',
+                                        selectedField === field.id
+                                            ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20'
+                                            : 'border-gray-200 dark:border-gray-700 hover:border-emerald-300'
+                                    )}
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <div className={cn(
+                                            'w-12 h-12 rounded-lg flex items-center justify-center',
+                                            selectedField === field.id
+                                                ? 'bg-emerald-500 text-white'
+                                                : 'bg-gray-100 dark:bg-gray-800 text-gray-500'
+                                        )}>
+                                            <MapPin className="w-6 h-6" />
+                                        </div>
+                                        <div>
+                                            <h3 className="font-semibold text-gray-900 dark:text-white">
+                                                {field.name}
+                                            </h3>
+                                            <p className="text-sm text-emerald-600 dark:text-emerald-400 font-medium">
+                                                {formatCurrency(field.pricePerHour)}/jam
+                                            </p>
+                                        </div>
+                                    </div>
+                                </button>
+                            ))}
                         </div>
-                    ) : (
-                        <>
-                            {/* Time Slot Grid */}
-                            <div className="grid grid-cols-7 gap-2">
-                                {availableSlots.map((slot) => (
-                                    <button
-                                        key={slot.time}
-                                        type="button"
-                                        onClick={() => {
-                                            if (slot.available) {
-                                                setSelectedStartTime(slot.time)
-                                                setSelectedEndTime('')
-                                            }
-                                        }}
-                                        className={cn(
-                                            'p-2 text-xs rounded-lg border transition-all',
-                                            slot.available
-                                                ? selectedStartTime === slot.time
-                                                    ? 'bg-emerald-500 text-white border-emerald-500'
-                                                    : 'hover:border-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'
-                                                : 'bg-gray-100 text-gray-400 cursor-not-allowed dark:bg-gray-800'
+                    </CardContent>
+                </Card>
+
+                {/* Step 2: Select Date */}
+                <Card className={cn('border-0 shadow-lg transition-opacity', !selectedField && 'opacity-50 pointer-events-none')}>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900 flex items-center justify-center text-emerald-600 dark:text-emerald-400 font-bold text-sm">
+                                2
+                            </div>
+                            Pilih Tanggal
+                        </CardTitle>
+                        <CardDescription>Pilih tanggal booking</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button
+                                    variant="outline"
+                                    className={cn(
+                                        'w-full justify-start text-left font-normal h-12',
+                                        !selectedDate && 'text-muted-foreground'
+                                    )}
+                                >
+                                    <CalendarIcon className="mr-2 h-4 w-4" />
+                                    {selectedDate
+                                        ? format(selectedDate, 'EEEE, d MMMM yyyy', { locale: localeId })
+                                        : 'Pilih tanggal'}
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                                <Calendar
+                                    mode="single"
+                                    selected={selectedDate}
+                                    onSelect={setSelectedDate}
+                                    disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                                    initialFocus
+                                />
+                            </PopoverContent>
+                        </Popover>
+                    </CardContent>
+                </Card>
+
+                {/* Step 3: Select Time Slots */}
+                <Card className={cn('border-0 shadow-lg transition-opacity', (!selectedField || !selectedDate) && 'opacity-50 pointer-events-none')}>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900 flex items-center justify-center text-emerald-600 dark:text-emerald-400 font-bold text-sm">
+                                3
+                            </div>
+                            Pilih Jam
+                        </CardTitle>
+                        <CardDescription>Pilih jam mulai, lalu pilih sampai jam berapa</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        {loadingSlots ? (
+                            <div className="flex items-center justify-center py-8">
+                                <Loader2 className="w-6 h-6 animate-spin text-emerald-500" />
+                            </div>
+                        ) : (
+                            <div className="space-y-6">
+                                {/* Start Time Selection */}
+                                <div className="space-y-2">
+                                    <Label className="text-sm font-medium">Jam Mulai</Label>
+                                    <div className="space-y-4">
+                                        {timeSlots.map((category) => {
+                                            const hours = generateHoursFromSlot(category.startTime, category.endTime)
+
+                                            return (
+                                                <div key={category.id} className="space-y-2">
+                                                    <div className="flex items-center gap-2 text-xs font-medium text-gray-500">
+                                                        {getCategoryIcon(category.name)}
+                                                        <span>{category.name}</span>
+                                                        <span className="text-gray-400">({category.startTime} - {category.endTime})</span>
+                                                    </div>
+                                                    <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
+                                                        {hours.map((slot) => {
+                                                            const isBooked = bookedSlots.includes(slot)
+                                                            const isSelected = selectedStartTime === slot
+
+                                                            return (
+                                                                <button
+                                                                    key={slot}
+                                                                    type="button"
+                                                                    onClick={() => selectStartTime(slot)}
+                                                                    disabled={isBooked}
+                                                                    className={cn(
+                                                                        'py-2 px-1 rounded-lg text-xs font-medium transition-all border',
+                                                                        isBooked && 'bg-red-100 text-red-400 cursor-not-allowed line-through border-red-200',
+                                                                        isSelected && !isBooked && 'bg-emerald-500 text-white shadow-lg border-emerald-500',
+                                                                        !isBooked && !isSelected && 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:border-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 border-gray-200 dark:border-gray-700'
+                                                                    )}
+                                                                >
+                                                                    {slot}
+                                                                </button>
+                                                            )
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* End Time Selection */}
+                                {selectedStartTime && (
+                                    <div className="space-y-2 p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                                        <Label className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+                                            Sampai Jam (Mulai: {selectedStartTime})
+                                        </Label>
+                                        <Select value={selectedEndTime} onValueChange={setSelectedEndTime}>
+                                            <SelectTrigger className="w-full bg-white dark:bg-gray-800">
+                                                <SelectValue placeholder="Pilih jam selesai" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {getValidEndTimes().map((time) => (
+                                                    <SelectItem key={time} value={time}>
+                                                        {time} ({parseInt(time.split(':')[0]) - parseInt(selectedStartTime.split(':')[0])} jam)
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                )}
+
+                                {/* Legend */}
+                                <div className="flex items-center gap-4 text-sm pt-2">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-4 h-4 rounded bg-emerald-500" />
+                                        <span className="text-gray-600 dark:text-gray-400">Dipilih</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-4 h-4 rounded bg-white border border-gray-200" />
+                                        <span className="text-gray-600 dark:text-gray-400">Tersedia</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-4 h-4 rounded bg-red-100" />
+                                        <span className="text-gray-600 dark:text-gray-400">Terisi</span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+
+                {/* Step 4: Customer Info */}
+                <Card className={cn('border-0 shadow-lg transition-opacity', !selectedEndTime && 'opacity-50 pointer-events-none')}>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900 flex items-center justify-center text-emerald-600 dark:text-emerald-400 font-bold text-sm">
+                                4
+                            </div>
+                            Data Pemesan
+                        </CardTitle>
+                        <CardDescription>Isi data penyewa</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="customerName" className="flex items-center gap-2">
+                                <User className="w-4 h-4" />
+                                Nama Penyewa
+                            </Label>
+                            <Input
+                                id="customerName"
+                                name="customerName"
+                                placeholder="Masukkan nama penyewa"
+                                required
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="customerPhone" className="flex items-center gap-2">
+                                <Phone className="w-4 h-4" />
+                                No. Telepon (Opsional)
+                            </Label>
+                            <Input
+                                id="customerPhone"
+                                name="customerPhone"
+                                type="tel"
+                                placeholder="08xxxxxxxxxx"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="notes">Catatan (Opsional)</Label>
+                            <Textarea
+                                id="notes"
+                                name="notes"
+                                placeholder="Catatan tambahan..."
+                                rows={3}
+                            />
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* Summary & Submit */}
+                {selectedEndTime && currentField && (
+                    <Card className="border-0 shadow-lg bg-gradient-to-br from-emerald-500 to-teal-600 text-white">
+                        <CardContent className="p-6">
+                            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                                <div>
+                                    <h3 className="font-semibold text-lg mb-2">Ringkasan Booking</h3>
+                                    <div className="space-y-1 text-white/90">
+                                        <p className="flex items-center gap-2">
+                                            <MapPin className="w-4 h-4" />
+                                            {currentField.name}
+                                        </p>
+                                        {selectedDate && (
+                                            <p className="flex items-center gap-2">
+                                                <CalendarIcon className="w-4 h-4" />
+                                                {format(selectedDate, 'EEEE, d MMMM yyyy', { locale: localeId })}
+                                            </p>
                                         )}
-                                        disabled={!slot.available}
-                                    >
-                                        {slot.time}
-                                    </button>
-                                ))}
+                                        <p className="flex items-center gap-2">
+                                            <Clock className="w-4 h-4" />
+                                            {selectedStartTime} - {selectedEndTime} ({getDuration()} jam)
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-sm text-white/80">Total Harga</p>
+                                    <p className="text-3xl font-bold">{formatCurrency(calculatePrice())}</p>
+                                </div>
                             </div>
 
-                            {/* End Time Selection */}
-                            {selectedStartTime && (
-                                <div className="space-y-2">
-                                    <Label className="text-sm text-gray-600">Sampai Jam</Label>
-                                    <Select
-                                        value={selectedEndTime}
-                                        onValueChange={setSelectedEndTime}
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Pilih jam selesai" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {getValidEndTimes().map((time) => (
-                                                <SelectItem key={time} value={time}>
-                                                    {time}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
+                            {state?.success === false && (
+                                <div className="mt-4 p-3 bg-red-500/20 border border-red-400/30 rounded-lg text-white">
+                                    {state.error}
                                 </div>
                             )}
-                        </>
-                    )}
-                </div>
-            )}
 
-            {/* Customer Info */}
-            <div className="space-y-4 pt-4 border-t">
-                <div className="space-y-2">
-                    <Label htmlFor="customerName">Nama Penyewa</Label>
-                    <Input
-                        id="customerName"
-                        name="customerName"
-                        placeholder="Masukkan nama penyewa"
-                        required
-                    />
-                </div>
-
-                <div className="space-y-2">
-                    <Label htmlFor="customerPhone">No. Telepon (Opsional)</Label>
-                    <Input
-                        id="customerPhone"
-                        name="customerPhone"
-                        type="tel"
-                        placeholder="08xxxxxxxxxx"
-                    />
-                </div>
-
-                <div className="space-y-2">
-                    <Label htmlFor="notes">Catatan (Opsional)</Label>
-                    <Textarea
-                        id="notes"
-                        name="notes"
-                        placeholder="Catatan tambahan..."
-                        rows={3}
-                    />
-                </div>
-            </div>
-
-            {/* Price Summary */}
-            {totalPrice > 0 && (
-                <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 border border-emerald-200 dark:border-emerald-800">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-sm text-gray-600 dark:text-gray-400">Total Harga</p>
-                            <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-                                {formatCurrency(totalPrice)}
-                            </p>
-                        </div>
-                        <div className="text-right">
-                            <p className="text-sm text-gray-600 dark:text-gray-400">Durasi</p>
-                            <p className="text-lg font-medium flex items-center gap-1">
-                                <Clock className="w-4 h-4" />
-                                {duration} jam
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {state?.success === false && (
-                <div className="p-3 text-sm text-red-600 bg-red-50 dark:bg-red-900/20 dark:text-red-400 rounded-lg">
-                    {state.error}
-                </div>
-            )}
-
-            <div className="flex gap-3">
-                <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => router.back()}
-                    className="flex-1"
-                >
-                    Batal
-                </Button>
-                <Button
-                    type="submit"
-                    disabled={isPending || !totalPrice}
-                    className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600"
-                >
-                    {isPending ? (
-                        <>
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            Menyimpan...
-                        </>
-                    ) : (
-                        'Buat Booking'
-                    )}
-                </Button>
+                            <div className="flex gap-3 mt-6">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => router.back()}
+                                    className="flex-1 bg-white/10 border-white/30 text-white hover:bg-white/20"
+                                >
+                                    Batal
+                                </Button>
+                                <Button
+                                    type="submit"
+                                    disabled={isPending || !selectedEndTime}
+                                    className="flex-1 bg-white text-emerald-700 hover:bg-gray-100"
+                                >
+                                    {isPending ? (
+                                        <>
+                                            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                                            Memproses...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <CheckCircle className="w-5 h-5 mr-2" />
+                                            Buat Booking
+                                        </>
+                                    )}
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
             </div>
         </form>
     )

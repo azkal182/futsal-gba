@@ -86,28 +86,28 @@ async function main() {
     const fields = await Promise.all([
         prisma.field.create({
             data: {
-                name: 'Lapangan A',
+                name: 'Lapangan GBA',
                 description: 'Lapangan utama dengan rumput sintetis premium',
-                pricePerHour: 150000,
+                pricePerHour: 50000,
                 isActive: true,
             },
         }),
-        prisma.field.create({
-            data: {
-                name: 'Lapangan B',
-                description: 'Lapangan standar dengan rumput sintetis',
-                pricePerHour: 120000,
-                isActive: true,
-            },
-        }),
-        prisma.field.create({
-            data: {
-                name: 'Lapangan C',
-                description: 'Lapangan indoor dengan AC',
-                pricePerHour: 200000,
-                isActive: true,
-            },
-        }),
+        // prisma.field.create({
+        //     data: {
+        //         name: 'Lapangan B',
+        //         description: 'Lapangan standar dengan rumput sintetis',
+        //         pricePerHour: 120000,
+        //         isActive: true,
+        //     },
+        // }),
+        // prisma.field.create({
+        //     data: {
+        //         name: 'Lapangan C',
+        //         description: 'Lapangan indoor dengan AC',
+        //         pricePerHour: 200000,
+        //         isActive: true,
+        //     },
+        // }),
     ])
 
     fields.forEach((f) => console.log(`  ✅ Created field: ${f.name} - Rp ${f.pricePerHour.toLocaleString()}/jam`))
@@ -129,19 +129,6 @@ async function main() {
                 duration: 2,
                 totalPrice: 300000,
                 status: 'CONFIRMED',
-            },
-        }),
-        prisma.booking.create({
-            data: {
-                fieldId: fields[1].id,
-                customerName: 'Andi Wijaya',
-                customerPhone: '089876543210',
-                date: today,
-                startTime: '14:00',
-                endTime: '16:00',
-                duration: 2,
-                totalPrice: 240000,
-                status: 'PENDING',
             },
         }),
         prisma.booking.create({
@@ -171,14 +158,6 @@ async function main() {
                 paymentMethod: 'CASH',
                 paymentStatus: 'PAID',
                 paidAt: new Date(),
-            },
-        }),
-        prisma.transaction.create({
-            data: {
-                bookingId: bookings[2].id,
-                amount: bookings[2].totalPrice,
-                paymentMethod: 'TRANSFER',
-                paymentStatus: 'UNPAID',
             },
         }),
     ])

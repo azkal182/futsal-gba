@@ -225,26 +225,28 @@ export function ReportsClient({
                                 <p>Tidak ada data untuk periode ini</p>
                             </div>
                         ) : (
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Lapangan</TableHead>
-                                        <TableHead className="text-right">Transaksi</TableHead>
-                                        <TableHead className="text-right">Total</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {incomeByField.map((item) => (
-                                        <TableRow key={item.fieldName}>
-                                            <TableCell className="font-medium">{item.fieldName}</TableCell>
-                                            <TableCell className="text-right">{item.count}x</TableCell>
-                                            <TableCell className="text-right font-medium text-emerald-600">
-                                                {formatCurrency(item.amount)}
-                                            </TableCell>
+                            <div className="overflow-x-auto">
+                                <Table className="min-w-[320px]">
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead className="pl-2">Lapangan</TableHead>
+                                            <TableHead className="text-right">Transaksi</TableHead>
+                                            <TableHead className="text-right pr-2">Total</TableHead>
                                         </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {incomeByField.map((item) => (
+                                            <TableRow key={item.fieldName}>
+                                                <TableCell className="font-medium pl-2">{item.fieldName}</TableCell>
+                                                <TableCell className="text-right">{item.count}x</TableCell>
+                                                <TableCell className="text-right font-medium text-emerald-600 pr-2">
+                                                    {formatCurrency(item.amount)}
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
                         )}
                     </CardContent>
                 </Card>
@@ -262,24 +264,26 @@ export function ReportsClient({
                                 <p>Tidak ada pengeluaran untuk periode ini</p>
                             </div>
                         ) : (
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Kategori</TableHead>
-                                        <TableHead className="text-right">Total</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {expensesByCategory.map((item) => (
-                                        <TableRow key={item.category}>
-                                            <TableCell className="font-medium">{item.category}</TableCell>
-                                            <TableCell className="text-right font-medium text-red-600">
-                                                {formatCurrency(item.amount)}
-                                            </TableCell>
+                            <div className="overflow-x-auto">
+                                <Table className="min-w-[280px]">
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead className="pl-2">Kategori</TableHead>
+                                            <TableHead className="text-right pr-2">Total</TableHead>
                                         </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {expensesByCategory.map((item) => (
+                                            <TableRow key={item.category}>
+                                                <TableCell className="font-medium pl-2">{item.category}</TableCell>
+                                                <TableCell className="text-right font-medium text-red-600 pr-2">
+                                                    {formatCurrency(item.amount)}
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
                         )}
                     </CardContent>
                 </Card>

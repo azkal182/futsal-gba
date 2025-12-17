@@ -3,14 +3,15 @@
 import { useState, useEffect } from 'react'
 import { format, addDays } from 'date-fns'
 import { id as localeId } from 'date-fns/locale'
-import { getBookedSlots } from '@/actions/bookings'
+import { getBookedSlotsWithDetails, type SlotDetail } from '@/actions/bookings'
 import type { Field } from '@/types'
 import type { TimeSlot } from '@/generated/prisma/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { CalendarIcon, Loader2, MapPin, ChevronLeft, ChevronRight, Clock, Sunrise, Sun, Sunset } from 'lucide-react'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { CalendarIcon, Loader2, MapPin, ChevronLeft, ChevronRight, Clock, Sunrise, Sun, Sunset, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
 
@@ -54,7 +55,7 @@ function getCategoryIcon(name: string): React.ReactNode {
 
 export function ScheduleView({ fields, timeSlots }: ScheduleViewProps) {
     const [selectedDate, setSelectedDate] = useState<Date>(new Date())
-    const [bookedSlotsMap, setBookedSlotsMap] = useState<Record<string, string[]>>({})
+    const [bookedSlotsMap, setBookedSlotsMap] = useState<Record<string, SlotDetail[]>>({})
     const [loading, setLoading] = useState(true)
 
     const allHours = getAllHours(timeSlots)
@@ -62,12 +63,12 @@ export function ScheduleView({ fields, timeSlots }: ScheduleViewProps) {
     useEffect(() => {
         async function loadAllSlots() {
             setLoading(true)
-            const slotsMap: Record<string, string[]> = {}
+            const slotsMap: Record<string, SlotDetail[]> = {}
 
             await Promise.all(
                 fields.map(async (field) => {
                     try {
-                        const slots = await getBookedSlots(field.id, selectedDate)
+                        const slots = await getBookedSlotsWithDetails(field.id, selectedDate)
                         slotsMap[field.id] = slots
                     } catch (error) {
                         console.error('Failed to load slots for field:', field.id, error)
@@ -184,74 +185,107 @@ export function ScheduleView({ fields, timeSlots }: ScheduleViewProps) {
                     <p className="text-sm text-gray-400">Hubungi admin untuk informasi lebih lanjut</p>
                 </div>
             ) : (
-                <div className="space-y-4">
-                    {fields.map((field) => {
-                        const bookedSlots = bookedSlotsMap[field.id] || []
-                        const availableCount = allHours.length - bookedSlots.filter(s => allHours.includes(s)).length
+                <TooltipProvider>
+                    <div className="space-y-4">
+                        {fields.map((field) => {
+                            const bookedSlots = bookedSlotsMap[field.id] || []
+                            const bookedSlotTimes = bookedSlots.map(s => s.slot)
+                            const availableCount = allHours.length - bookedSlots.filter(s => allHours.includes(s.slot)).length
 
-                        return (
-                            <Card key={field.id} className="border-0 shadow-lg overflow-hidden">
-                                <CardHeader className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-4">
-                                    <div className="flex items-center justify-between">
-                                        <CardTitle className="flex items-center gap-2 text-lg">
-                                            <MapPin className="w-5 h-5" />
-                                            {field.name}
-                                        </CardTitle>
-                                        <span className="text-sm bg-white/20 px-3 py-1 rounded-full">
-                                            {availableCount} slot tersedia
-                                        </span>
-                                    </div>
-                                </CardHeader>
-                                <CardContent className="p-4">
-                                    <div className="space-y-3">
-                                        {timeSlots.map((category) => {
-                                            const hours = generateHoursFromSlot(category.startTime, category.endTime)
+                            // Create a map for quick lookup
+                            const slotDetailsMap = new Map<string, SlotDetail>()
+                            bookedSlots.forEach(s => slotDetailsMap.set(s.slot, s))
 
-                                            return (
-                                                <div key={category.id}>
-                                                    <div className="flex items-center gap-2 text-xs font-medium text-gray-500 mb-1">
-                                                        {getCategoryIcon(category.name)}
-                                                        <span>{category.name}</span>
-                                                    </div>
-                                                    <div className="grid grid-cols-6 sm:grid-cols-8 gap-1">
-                                                        {hours.map((slot) => {
-                                                            const isBooked = bookedSlots.includes(slot)
-
-                                                            return (
-                                                                <div
-                                                                    key={slot}
-                                                                    className={cn(
-                                                                        'py-2 px-1 text-center text-xs font-medium rounded transition-colors',
-                                                                        isBooked
-                                                                            ? 'bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400'
-                                                                            : 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400'
-                                                                    )}
-                                                                    title={isBooked ? 'Slot sudah terisi' : 'Tersedia'}
-                                                                >
-                                                                    {slot}
-                                                                </div>
-                                                            )
-                                                        })}
-                                                    </div>
-                                                </div>
-                                            )
-                                        })}
-                                    </div>
-
-                                    {availableCount > 0 && (
-                                        <div className="mt-4 text-center">
-                                            <Link href={`/book?field=${field.id}`}>
-                                                <Button size="sm" className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700">
-                                                    Booking {field.name}
-                                                </Button>
-                                            </Link>
+                            return (
+                                <Card key={field.id} className="border-0 shadow-lg overflow-hidden">
+                                    <CardHeader className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-4">
+                                        <div className="flex items-center justify-between">
+                                            <CardTitle className="flex items-center gap-2 text-lg">
+                                                <MapPin className="w-5 h-5" />
+                                                {field.name}
+                                            </CardTitle>
+                                            <span className="text-sm bg-white/20 px-3 py-1 rounded-full">
+                                                {availableCount} slot tersedia
+                                            </span>
                                         </div>
-                                    )}
-                                </CardContent>
-                            </Card>
-                        )
-                    })}
-                </div>
+                                    </CardHeader>
+                                    <CardContent className="p-4">
+                                        <div className="space-y-3">
+                                            {timeSlots.map((category) => {
+                                                const hours = generateHoursFromSlot(category.startTime, category.endTime)
+
+                                                return (
+                                                    <div key={category.id}>
+                                                        <div className="flex items-center gap-2 text-xs font-medium text-gray-500 mb-1">
+                                                            {getCategoryIcon(category.name)}
+                                                            <span>{category.name}</span>
+                                                        </div>
+                                                        <div className="grid grid-cols-4 sm:grid-cols-8 gap-1">
+                                                            {hours.map((slot) => {
+                                                                const slotDetail = slotDetailsMap.get(slot)
+                                                                const isBooked = !!slotDetail
+
+                                                                if (isBooked) {
+                                                                    return (
+                                                                        <Tooltip key={slot}>
+                                                                            <TooltipTrigger asChild>
+                                                                                <div
+                                                                                    className={cn(
+                                                                                        'py-2 px-1 text-center text-xs font-medium rounded transition-colors cursor-pointer',
+                                                                                        slotDetail.status === 'PENDING'
+                                                                                            ? 'bg-amber-100 dark:bg-amber-900/50 text-amber-600 dark:text-amber-400'
+                                                                                            : 'bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400'
+                                                                                    )}
+                                                                                >
+                                                                                    <div className="flex flex-col items-center">
+                                                                                        <span>{slot}</span>
+                                                                                        <User className="w-3 h-3 mt-0.5" />
+                                                                                    </div>
+                                                                                </div>
+                                                                            </TooltipTrigger>
+                                                                            <TooltipContent>
+                                                                                <div className="text-sm">
+                                                                                    <p className="font-semibold">{slotDetail.customerName}</p>
+                                                                                    <p className="text-xs text-gray-400">
+                                                                                        {slotDetail.status === 'PENDING' ? 'Menunggu Konfirmasi' : 'Dikonfirmasi'}
+                                                                                    </p>
+                                                                                </div>
+                                                                            </TooltipContent>
+                                                                        </Tooltip>
+                                                                    )
+                                                                }
+
+                                                                return (
+                                                                    <div
+                                                                        key={slot}
+                                                                        className="py-2 px-1 text-center text-xs font-medium rounded transition-colors bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400"
+                                                                        title="Tersedia"
+                                                                    >
+                                                                        {slot}
+                                                                    </div>
+                                                                )
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+
+                                        {availableCount > 0 && (
+                                            <div className="mt-4 text-center">
+                                                <Link href={`/book?field=${field.id}`}>
+                                                    <Button size="sm" className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700">
+                                                        Booking {field.name}
+                                                    </Button>
+                                                </Link>
+                                            </div>
+                                        )}
+                                    </CardContent>
+                                </Card>
+                            )
+                        })}
+                    </div>
+                </TooltipProvider>
             )}
         </div>
     )

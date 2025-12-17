@@ -302,6 +302,230 @@ export async function updateBookingStatus(
     }
 }
 
+/**
+ * Create a booking from dashboard (auto-confirmed)
+ */
+export async function createConfirmedBooking(
+    _prevState: ActionResult<BookingFull> | null,
+    formData: FormData
+): Promise<ActionResult<BookingFull>> {
+    try {
+        await requireAuth()
+
+        const rawData = {
+            fieldId: formData.get('fieldId') as string,
+            customerName: formData.get('customerName') as string,
+            customerPhone: (formData.get('customerPhone') as string) || undefined,
+            date: new Date(formData.get('date') as string),
+            startTime: formData.get('startTime') as string,
+            endTime: formData.get('endTime') as string,
+            notes: (formData.get('notes') as string) || undefined,
+        }
+
+        const validatedFields = bookingSchema.safeParse(rawData)
+
+        if (!validatedFields.success) {
+            return {
+                success: false,
+                error: validatedFields.error.issues[0]?.message ?? 'Data tidak valid',
+            }
+        }
+
+        const { fieldId, customerName, customerPhone, date, startTime, endTime, notes } = validatedFields.data
+
+        // Get field for price calculation
+        const field = await prisma.field.findUnique({
+            where: { id: fieldId },
+        })
+
+        if (!field) {
+            return { success: false, error: 'Lapangan tidak ditemukan' }
+        }
+
+        if (!field.isActive) {
+            return { success: false, error: 'Lapangan tidak aktif' }
+        }
+
+        // Calculate duration and price
+        const duration = calculateDuration(startTime, endTime)
+
+        if (duration <= 0) {
+            return { success: false, error: 'Waktu selesai harus lebih besar dari waktu mulai' }
+        }
+
+        const totalPrice = field.pricePerHour * duration
+
+        // Use transaction to prevent race conditions (double booking)
+        const booking = await prisma.$transaction(async (tx) => {
+            // Check for overlapping bookings
+            const existingBooking = await tx.booking.findFirst({
+                where: {
+                    fieldId,
+                    date: {
+                        gte: startOfDay(date),
+                        lte: endOfDay(date),
+                    },
+                    status: {
+                        in: ['PENDING', 'CONFIRMED'],
+                    },
+                    OR: [
+                        // New booking starts during existing booking
+                        {
+                            startTime: { lte: startTime },
+                            endTime: { gt: startTime },
+                        },
+                        // New booking ends during existing booking
+                        {
+                            startTime: { lt: endTime },
+                            endTime: { gte: endTime },
+                        },
+                        // New booking contains existing booking
+                        {
+                            startTime: { gte: startTime },
+                            endTime: { lte: endTime },
+                        },
+                    ],
+                },
+            })
+
+            if (existingBooking) {
+                throw new Error('Slot waktu sudah dibooking')
+            }
+
+            // Create booking with CONFIRMED status
+            return tx.booking.create({
+                data: {
+                    fieldId,
+                    customerName,
+                    customerPhone,
+                    date: startOfDay(date),
+                    startTime,
+                    endTime,
+                    duration,
+                    totalPrice,
+                    notes,
+                    status: 'CONFIRMED', // Auto-confirmed for dashboard bookings
+                },
+                include: {
+                    field: true,
+                    transaction: true,
+                },
+            })
+        })
+
+        revalidatePath('/dashboard/bookings')
+        revalidatePath('/dashboard')
+        revalidatePath('/schedule')
+
+        return { success: true, data: booking }
+    } catch (error) {
+        console.error('Error creating confirmed booking:', error)
+        if (error instanceof Error) {
+            return { success: false, error: error.message }
+        }
+        return { success: false, error: 'Gagal membuat booking' }
+    }
+}
+
+/**
+ * Cancel a booking (only allowed 3 hours before the scheduled time)
+ */
+export async function cancelBooking(id: string): Promise<ActionResult<BookingFull>> {
+    try {
+        await requireAuth()
+
+        const booking = await prisma.booking.findUnique({
+            where: { id },
+            include: {
+                field: true,
+                transaction: true,
+            },
+        })
+
+        if (!booking) {
+            return { success: false, error: 'Booking tidak ditemukan' }
+        }
+
+        // Check if booking is already cancelled or completed
+        if (booking.status === 'CANCELLED') {
+            return { success: false, error: 'Booking sudah dibatalkan' }
+        }
+
+        if (booking.status === 'COMPLETED') {
+            return { success: false, error: 'Booking yang sudah selesai tidak dapat dibatalkan' }
+        }
+
+        // Calculate minimum cancel time (3 hours before booking)
+        const bookingDateTime = new Date(booking.date)
+        const [hour, minute] = booking.startTime.split(':').map(Number)
+        bookingDateTime.setHours(hour, minute, 0, 0)
+
+        const now = new Date()
+        const hoursUntilBooking = (bookingDateTime.getTime() - now.getTime()) / (1000 * 60 * 60)
+
+        if (hoursUntilBooking < 3) {
+            return {
+                success: false,
+                error: 'Pembatalan hanya dapat dilakukan minimal 3 jam sebelum jadwal booking'
+            }
+        }
+
+        // Cancel the booking
+        const updatedBooking = await prisma.booking.update({
+            where: { id },
+            data: { status: 'CANCELLED' },
+            include: {
+                field: true,
+                transaction: true,
+            },
+        })
+
+        revalidatePath('/dashboard/bookings')
+        revalidatePath('/dashboard')
+        revalidatePath('/schedule')
+
+        return { success: true, data: updatedBooking }
+    } catch (error) {
+        console.error('Error cancelling booking:', error)
+        return { success: false, error: 'Gagal membatalkan booking' }
+    }
+}
+
+/**
+ * Check if a booking can be cancelled (3 hours before)
+ */
+export async function canCancelBooking(id: string): Promise<{ canCancel: boolean; reason?: string }> {
+    const booking = await prisma.booking.findUnique({
+        where: { id },
+    })
+
+    if (!booking) {
+        return { canCancel: false, reason: 'Booking tidak ditemukan' }
+    }
+
+    if (booking.status === 'CANCELLED') {
+        return { canCancel: false, reason: 'Sudah dibatalkan' }
+    }
+
+    if (booking.status === 'COMPLETED') {
+        return { canCancel: false, reason: 'Sudah selesai' }
+    }
+
+    // Calculate time until booking
+    const bookingDateTime = new Date(booking.date)
+    const [hour, minute] = booking.startTime.split(':').map(Number)
+    bookingDateTime.setHours(hour, minute, 0, 0)
+
+    const now = new Date()
+    const hoursUntilBooking = (bookingDateTime.getTime() - now.getTime()) / (1000 * 60 * 60)
+
+    if (hoursUntilBooking < 3) {
+        return { canCancel: false, reason: 'Kurang dari 3 jam' }
+    }
+
+    return { canCancel: true }
+}
+
 export async function getBookingStats() {
     await requireAuth()
 
@@ -367,6 +591,53 @@ export async function getBookedSlots(fieldId: string, date: Date): Promise<strin
     }
 
     return bookedSlots
+}
+
+export interface SlotDetail {
+    slot: string
+    customerName: string
+    status: string
+}
+
+/**
+ * Get booked slots with customer details for schedule view (public)
+ */
+export async function getBookedSlotsWithDetails(fieldId: string, date: Date): Promise<SlotDetail[]> {
+    const bookings = await prisma.booking.findMany({
+        where: {
+            fieldId,
+            date: {
+                gte: startOfDay(date),
+                lte: endOfDay(date),
+            },
+            status: {
+                in: ['PENDING', 'CONFIRMED'],
+            },
+        },
+        select: {
+            startTime: true,
+            endTime: true,
+            customerName: true,
+            status: true,
+        },
+    })
+
+    const slotDetails: SlotDetail[] = []
+
+    for (const booking of bookings) {
+        const [startHour] = booking.startTime.split(':').map(Number)
+        const [endHour] = booking.endTime.split(':').map(Number)
+
+        for (let hour = startHour; hour < endHour; hour++) {
+            slotDetails.push({
+                slot: `${hour.toString().padStart(2, '0')}:00`,
+                customerName: booking.customerName,
+                status: booking.status,
+            })
+        }
+    }
+
+    return slotDetails
 }
 
 /**

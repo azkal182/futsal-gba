@@ -15,12 +15,12 @@ export default async function DashboardLayout({
     }
 
     return (
-        <div className="flex min-h-screen bg-gray-50 dark:bg-gray-950">
+        <div className="flex h-screen overflow-hidden bg-gray-50 dark:bg-gray-950">
             <AppSidebar />
 
-            <main className="flex-1 lg:ml-0">
-                {/* Header */}
-                <header className="sticky top-0 z-30 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm border-b border-gray-200 dark:border-gray-800">
+            <main className="flex-1 flex flex-col min-w-0">
+                {/* Header - fixed at top */}
+                <header className="flex-shrink-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm border-b border-gray-200 dark:border-gray-800">
                     <div className="flex items-center justify-between px-6 py-4 lg:px-8">
                         <div className="lg:hidden w-10" /> {/* Spacer for mobile menu button */}
                         <div className="flex-1 lg:flex-none" />
@@ -41,8 +41,8 @@ export default async function DashboardLayout({
                     </div>
                 </header>
 
-                {/* Content */}
-                <div className="p-6 lg:p-8">
+                {/* Content - scrollable */}
+                <div className="flex-1 overflow-auto p-6 lg:p-8">
                     {children}
                 </div>
             </main>

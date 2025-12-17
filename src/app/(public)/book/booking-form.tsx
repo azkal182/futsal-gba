@@ -16,6 +16,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { CalendarIcon, Loader2, CheckCircle, MapPin, Clock, User, Phone, Sunrise, Sun, Sunset } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -36,6 +37,16 @@ function generateHoursFromSlot(startTime: string, endTime: string): string[] {
     return hours
 }
 
+// Get all hours from all time slots
+function getAllHours(slots: TimeSlot[]): string[] {
+    const allHours: string[] = []
+    slots.forEach(slot => {
+        const hours = generateHoursFromSlot(slot.startTime, slot.endTime)
+        allHours.push(...hours)
+    })
+    return [...new Set(allHours)].sort()
+}
+
 // Category icons
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
     'pagi': <Sunrise className="w-4 h-4" />,
@@ -54,9 +65,12 @@ export function PublicBookingForm({ fields, timeSlots, preselectedFieldId }: Pub
 
     const [selectedField, setSelectedField] = useState<string>(preselectedFieldId || '')
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined)
-    const [selectedSlots, setSelectedSlots] = useState<string[]>([])
+    const [selectedStartTime, setSelectedStartTime] = useState<string>('')
+    const [selectedEndTime, setSelectedEndTime] = useState<string>('')
     const [bookedSlots, setBookedSlots] = useState<string[]>([])
     const [loadingSlots, setLoadingSlots] = useState(false)
+
+    const allHours = getAllHours(timeSlots)
 
     const currentField = fields.find(f => f.id === selectedField)
 
@@ -65,7 +79,8 @@ export function PublicBookingForm({ fields, timeSlots, preselectedFieldId }: Pub
         async function loadBookedSlots() {
             if (selectedField && selectedDate) {
                 setLoadingSlots(true)
-                setSelectedSlots([])
+                setSelectedStartTime('')
+                setSelectedEndTime('')
                 try {
                     const slots = await getBookedSlots(selectedField, selectedDate)
                     setBookedSlots(slots)
@@ -87,30 +102,56 @@ export function PublicBookingForm({ fields, timeSlots, preselectedFieldId }: Pub
         }
     }, [state, router])
 
-    const toggleSlot = (slot: string) => {
+    // Select start time
+    const selectStartTime = (slot: string) => {
         if (bookedSlots.includes(slot)) return
+        setSelectedStartTime(slot)
+        setSelectedEndTime('')
+    }
 
-        setSelectedSlots(prev => {
-            if (prev.includes(slot)) {
-                return prev.filter(s => s !== slot)
-            }
-            // Keep slots contiguous
-            const sorted = [...prev, slot].sort()
-            return sorted
-        })
+    // Get valid end times based on start time
+    const getValidEndTimes = (): string[] => {
+        if (!selectedStartTime) return []
+
+        const startIndex = allHours.indexOf(selectedStartTime)
+        if (startIndex === -1) return []
+
+        const validEndTimes: string[] = []
+
+        // Find consecutive available slots
+        for (let i = startIndex; i < allHours.length; i++) {
+            const currentSlot = allHours[i]
+
+            // If this slot is booked and it's not the start slot, stop
+            if (bookedSlots.includes(currentSlot) && i > startIndex) break
+
+            // Add end time (next hour)
+            const [hour] = currentSlot.split(':').map(Number)
+            const endTime = `${(hour + 1).toString().padStart(2, '0')}:00`
+            validEndTimes.push(endTime)
+        }
+
+        return validEndTimes
     }
 
     const calculatePrice = () => {
-        if (!currentField || selectedSlots.length === 0) return 0
-        return currentField.pricePerHour * selectedSlots.length
+        if (!currentField || !selectedStartTime || !selectedEndTime) return 0
+
+        const [startHour] = selectedStartTime.split(':').map(Number)
+        const [endHour] = selectedEndTime.split(':').map(Number)
+        const duration = endHour - startHour
+
+        if (duration <= 0) return 0
+        return currentField.pricePerHour * duration
     }
 
-    const getEndTime = () => {
-        if (selectedSlots.length === 0) return ''
-        const lastSlot = selectedSlots.sort().pop()!
-        const [hour] = lastSlot.split(':').map(Number)
-        return `${(hour + 1).toString().padStart(2, '0')}:00`
+    const getDuration = () => {
+        if (!selectedStartTime || !selectedEndTime) return 0
+        const [startHour] = selectedStartTime.split(':').map(Number)
+        const [endHour] = selectedEndTime.split(':').map(Number)
+        return endHour - startHour
     }
+
 
     return (
         <form action={formAction}>
@@ -213,11 +254,11 @@ export function PublicBookingForm({ fields, timeSlots, preselectedFieldId }: Pub
                             </div>
                             Pilih Jam
                         </CardTitle>
-                        <CardDescription>Pilih satu atau beberapa slot waktu berurutan</CardDescription>
+                        <CardDescription>Pilih jam mulai, lalu pilih sampai jam berapa</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <input type="hidden" name="startTime" value={selectedSlots.sort()[0] || ''} />
-                        <input type="hidden" name="endTime" value={getEndTime()} />
+                        <input type="hidden" name="startTime" value={selectedStartTime} />
+                        <input type="hidden" name="endTime" value={selectedEndTime} />
 
                         {loadingSlots ? (
                             <div className="flex items-center justify-center py-8">
@@ -230,65 +271,93 @@ export function PublicBookingForm({ fields, timeSlots, preselectedFieldId }: Pub
                                 <p className="text-sm">Hubungi admin untuk informasi lebih lanjut</p>
                             </div>
                         ) : (
-                            <div className="space-y-4">
-                                {timeSlots.map((category) => {
-                                    const hours = generateHoursFromSlot(category.startTime, category.endTime)
+                            <div className="space-y-6">
+                                {/* Start Time Selection */}
+                                <div className="space-y-2">
+                                    <Label className="text-sm font-medium">Jam Mulai</Label>
+                                    <div className="space-y-4">
+                                        {timeSlots.map((category) => {
+                                            const hours = generateHoursFromSlot(category.startTime, category.endTime)
 
-                                    return (
-                                        <div key={category.id} className="space-y-2">
-                                            <div className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-                                                {getCategoryIcon(category.name)}
-                                                <span>{category.name}</span>
-                                                <span className="text-gray-400">({category.startTime} - {category.endTime})</span>
-                                            </div>
-                                            <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-                                                {hours.map((slot) => {
-                                                    const isBooked = bookedSlots.includes(slot)
-                                                    const isSelected = selectedSlots.includes(slot)
+                                            return (
+                                                <div key={category.id} className="space-y-2">
+                                                    <div className="flex items-center gap-2 text-xs font-medium text-gray-500">
+                                                        {getCategoryIcon(category.name)}
+                                                        <span>{category.name}</span>
+                                                        <span className="text-gray-400">({category.startTime} - {category.endTime})</span>
+                                                    </div>
+                                                    <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
+                                                        {hours.map((slot) => {
+                                                            const isBooked = bookedSlots.includes(slot)
+                                                            const isSelected = selectedStartTime === slot
 
-                                                    return (
-                                                        <button
-                                                            key={slot}
-                                                            type="button"
-                                                            onClick={() => toggleSlot(slot)}
-                                                            disabled={isBooked}
-                                                            className={cn(
-                                                                'py-3 px-2 rounded-lg text-sm font-medium transition-all',
-                                                                isBooked && 'bg-red-100 text-red-400 cursor-not-allowed line-through',
-                                                                isSelected && !isBooked && 'bg-emerald-500 text-white shadow-lg',
-                                                                !isBooked && !isSelected && 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-emerald-100 dark:hover:bg-emerald-900'
-                                                            )}
-                                                        >
-                                                            {slot}
-                                                        </button>
-                                                    )
-                                                })}
-                                            </div>
-                                        </div>
-                                    )
-                                })}
+                                                            return (
+                                                                <button
+                                                                    key={slot}
+                                                                    type="button"
+                                                                    onClick={() => selectStartTime(slot)}
+                                                                    disabled={isBooked}
+                                                                    className={cn(
+                                                                        'py-2 px-1 rounded-lg text-xs font-medium transition-all border',
+                                                                        isBooked && 'bg-red-100 text-red-400 cursor-not-allowed line-through border-red-200',
+                                                                        isSelected && !isBooked && 'bg-emerald-500 text-white shadow-lg border-emerald-500',
+                                                                        !isBooked && !isSelected && 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:border-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 border-gray-200 dark:border-gray-700'
+                                                                    )}
+                                                                >
+                                                                    {slot}
+                                                                </button>
+                                                            )
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* End Time Selection */}
+                                {selectedStartTime && (
+                                    <div className="space-y-2 p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                                        <Label className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+                                            Sampai Jam (Mulai: {selectedStartTime})
+                                        </Label>
+                                        <Select value={selectedEndTime} onValueChange={setSelectedEndTime}>
+                                            <SelectTrigger className="w-full bg-white dark:bg-gray-800">
+                                                <SelectValue placeholder="Pilih jam selesai" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {getValidEndTimes().map((time) => (
+                                                    <SelectItem key={time} value={time}>
+                                                        {time} ({parseInt(time.split(':')[0]) - parseInt(selectedStartTime.split(':')[0])} jam)
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                )}
+
+                                {/* Legend */}
+                                <div className="flex items-center gap-4 text-sm pt-2">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-4 h-4 rounded bg-emerald-500" />
+                                        <span className="text-gray-600 dark:text-gray-400">Dipilih</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-4 h-4 rounded bg-white border border-gray-200" />
+                                        <span className="text-gray-600 dark:text-gray-400">Tersedia</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-4 h-4 rounded bg-red-100" />
+                                        <span className="text-gray-600 dark:text-gray-400">Terisi</span>
+                                    </div>
+                                </div>
                             </div>
                         )}
-
-                        <div className="mt-4 flex items-center gap-4 text-sm">
-                            <div className="flex items-center gap-2">
-                                <div className="w-4 h-4 rounded bg-emerald-500" />
-                                <span className="text-gray-600 dark:text-gray-400">Dipilih</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <div className="w-4 h-4 rounded bg-gray-100 dark:bg-gray-800" />
-                                <span className="text-gray-600 dark:text-gray-400">Tersedia</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <div className="w-4 h-4 rounded bg-red-100" />
-                                <span className="text-gray-600 dark:text-gray-400">Terisi</span>
-                            </div>
-                        </div>
                     </CardContent>
                 </Card>
 
                 {/* Step 4: Customer Info */}
-                <Card className={cn('border-0 shadow-lg transition-opacity', selectedSlots.length === 0 && 'opacity-50 pointer-events-none')}>
+                <Card className={cn('border-0 shadow-lg transition-opacity', !selectedEndTime && 'opacity-50 pointer-events-none')}>
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900 flex items-center justify-center text-emerald-600 dark:text-emerald-400 font-bold text-sm">
@@ -336,7 +405,7 @@ export function PublicBookingForm({ fields, timeSlots, preselectedFieldId }: Pub
                 </Card>
 
                 {/* Summary & Submit */}
-                {selectedSlots.length > 0 && currentField && (
+                {selectedEndTime && currentField && (
                     <Card className="border-0 shadow-lg bg-gradient-to-br from-emerald-500 to-teal-600 text-white">
                         <CardContent className="p-6">
                             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -355,7 +424,7 @@ export function PublicBookingForm({ fields, timeSlots, preselectedFieldId }: Pub
                                         )}
                                         <p className="flex items-center gap-2">
                                             <Clock className="w-4 h-4" />
-                                            {selectedSlots.sort()[0]} - {getEndTime()} ({selectedSlots.length} jam)
+                                            {selectedStartTime} - {selectedEndTime} ({getDuration()} jam)
                                         </p>
                                     </div>
                                 </div>
@@ -373,7 +442,7 @@ export function PublicBookingForm({ fields, timeSlots, preselectedFieldId }: Pub
 
                             <Button
                                 type="submit"
-                                disabled={isPending || selectedSlots.length === 0}
+                                disabled={isPending || !selectedEndTime}
                                 className="w-full mt-6 bg-white text-emerald-700 hover:bg-gray-100 h-14 text-lg font-semibold"
                             >
                                 {isPending ? (

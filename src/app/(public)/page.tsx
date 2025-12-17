@@ -31,7 +31,7 @@ export default async function PublicHomePage() {
                                 </Button>
                             </Link>
                             <Link href="/schedule">
-                                <Button size="lg" variant="outline" className="w-full sm:w-auto border-white text-white hover:bg-white/10 text-lg px-8">
+                                <Button size="lg" variant="outline" className="w-full sm:w-auto border-white bg-teal-600 text-white hover:bg-white/10 text-lg px-8">
                                     Lihat Jadwal
                                 </Button>
                             </Link>

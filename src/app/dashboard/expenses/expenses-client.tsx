@@ -218,52 +218,54 @@ export function ExpensesClient({ initialExpenses }: ExpensesClientProps) {
             ) : (
                 <Card className="border-0 shadow-lg">
                     <CardContent className="p-0">
-                        <Table>
-                            <TableHeader>
-                                <TableRow className="bg-gray-50 dark:bg-gray-800/50">
-                                    <TableHead className="font-semibold">Tanggal</TableHead>
-                                    <TableHead className="font-semibold">Deskripsi</TableHead>
-                                    <TableHead className="font-semibold">Kategori</TableHead>
-                                    <TableHead className="font-semibold">Jumlah</TableHead>
-                                    <TableHead className="text-right font-semibold">Aksi</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {initialExpenses.map((expense) => (
-                                    <TableRow key={expense.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                                        <TableCell>
-                                            {format(new Date(expense.date), 'dd MMM yyyy', { locale: localeId })}
-                                        </TableCell>
-                                        <TableCell className="font-medium">{expense.description}</TableCell>
-                                        <TableCell>
-                                            {expense.category ? (
-                                                <Badge variant="outline">{expense.category}</Badge>
-                                            ) : (
-                                                <span className="text-gray-400">-</span>
-                                            )}
-                                        </TableCell>
-                                        <TableCell className="font-medium text-red-600 dark:text-red-400">
-                                            {formatCurrency(expense.amount)}
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            <Button
-                                                size="sm"
-                                                variant="ghost"
-                                                onClick={() => handleDelete(expense.id)}
-                                                disabled={deletingId === expense.id}
-                                                className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                                            >
-                                                {deletingId === expense.id ? (
-                                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                                ) : (
-                                                    <Trash2 className="w-4 h-4" />
-                                                )}
-                                            </Button>
-                                        </TableCell>
+                        <div className="overflow-x-auto">
+                            <Table className="min-w-[600px]">
+                                <TableHeader>
+                                    <TableRow className="bg-gray-50 dark:bg-gray-800/50">
+                                        <TableHead className="font-semibold pl-4 sm:pl-6">Tanggal</TableHead>
+                                        <TableHead className="font-semibold">Deskripsi</TableHead>
+                                        <TableHead className="font-semibold">Kategori</TableHead>
+                                        <TableHead className="font-semibold">Jumlah</TableHead>
+                                        <TableHead className="text-right font-semibold pr-4 sm:pr-6">Aksi</TableHead>
                                     </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
+                                </TableHeader>
+                                <TableBody>
+                                    {initialExpenses.map((expense) => (
+                                        <TableRow key={expense.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                            <TableCell className="pl-4 sm:pl-6">
+                                                {format(new Date(expense.date), 'dd MMM yyyy', { locale: localeId })}
+                                            </TableCell>
+                                            <TableCell className="font-medium">{expense.description}</TableCell>
+                                            <TableCell>
+                                                {expense.category ? (
+                                                    <Badge variant="outline">{expense.category}</Badge>
+                                                ) : (
+                                                    <span className="text-gray-400">-</span>
+                                                )}
+                                            </TableCell>
+                                            <TableCell className="font-medium text-red-600 dark:text-red-400">
+                                                {formatCurrency(expense.amount)}
+                                            </TableCell>
+                                            <TableCell className="text-right pr-4 sm:pr-6">
+                                                <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    onClick={() => handleDelete(expense.id)}
+                                                    disabled={deletingId === expense.id}
+                                                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                                >
+                                                    {deletingId === expense.id ? (
+                                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                                    ) : (
+                                                        <Trash2 className="w-4 h-4" />
+                                                    )}
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
                     </CardContent>
                 </Card>
             )}

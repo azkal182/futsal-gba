@@ -218,69 +218,71 @@ export function TransactionsClient({
             ) : (
                 <Card className="border-0 shadow-lg">
                     <CardContent className="p-0">
-                        <Table>
-                            <TableHeader>
-                                <TableRow className="bg-gray-50 dark:bg-gray-800/50">
-                                    <TableHead className="font-semibold">Tanggal</TableHead>
-                                    <TableHead className="font-semibold">Booking</TableHead>
-                                    <TableHead className="font-semibold">Lapangan</TableHead>
-                                    <TableHead className="font-semibold">Metode</TableHead>
-                                    <TableHead className="font-semibold">Jumlah</TableHead>
-                                    <TableHead className="font-semibold">Status</TableHead>
-                                    <TableHead className="text-right font-semibold">Aksi</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {initialTransactions.map((transaction) => (
-                                    <TableRow key={transaction.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                                        <TableCell>
-                                            {format(new Date(transaction.createdAt), 'dd MMM yyyy', { locale: localeId })}
-                                        </TableCell>
-                                        <TableCell>
-                                            <div>
-                                                <p className="font-medium">{transaction.booking.customerName}</p>
-                                                <p className="text-sm text-gray-500">
-                                                    {format(new Date(transaction.booking.date), 'dd MMM', { locale: localeId })} •{' '}
-                                                    {transaction.booking.startTime}-{transaction.booking.endTime}
-                                                </p>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>{transaction.booking.field.name}</TableCell>
-                                        <TableCell>
-                                            {PAYMENT_METHOD_LABELS[transaction.paymentMethod]}
-                                        </TableCell>
-                                        <TableCell className="font-medium text-emerald-600 dark:text-emerald-400">
-                                            {formatCurrency(transaction.amount)}
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge className={PAYMENT_STATUS_COLORS[transaction.paymentStatus]}>
-                                                {PAYMENT_STATUS_LABELS[transaction.paymentStatus]}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            {transaction.paymentStatus === 'UNPAID' && (
-                                                <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    onClick={() => handleMarkAsPaid(transaction.id)}
-                                                    disabled={markingPaidId === transaction.id}
-                                                    className="text-green-600 hover:text-green-700 hover:bg-green-50"
-                                                >
-                                                    {markingPaidId === transaction.id ? (
-                                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                                    ) : (
-                                                        <>
-                                                            <Check className="w-4 h-4 mr-1" />
-                                                            Lunas
-                                                        </>
-                                                    )}
-                                                </Button>
-                                            )}
-                                        </TableCell>
+                        <div className="overflow-x-auto">
+                            <Table className="min-w-[700px]">
+                                <TableHeader>
+                                    <TableRow className="bg-gray-50 dark:bg-gray-800/50">
+                                        <TableHead className="font-semibold pl-4 sm:pl-6">Tanggal</TableHead>
+                                        <TableHead className="font-semibold">Booking</TableHead>
+                                        <TableHead className="font-semibold">Lapangan</TableHead>
+                                        <TableHead className="font-semibold">Metode</TableHead>
+                                        <TableHead className="font-semibold">Jumlah</TableHead>
+                                        <TableHead className="font-semibold">Status</TableHead>
+                                        <TableHead className="text-right font-semibold pr-4 sm:pr-6">Aksi</TableHead>
                                     </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
+                                </TableHeader>
+                                <TableBody>
+                                    {initialTransactions.map((transaction) => (
+                                        <TableRow key={transaction.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                            <TableCell className="pl-4 sm:pl-6">
+                                                {format(new Date(transaction.createdAt), 'dd MMM yyyy', { locale: localeId })}
+                                            </TableCell>
+                                            <TableCell>
+                                                <div>
+                                                    <p className="font-medium">{transaction.booking.customerName}</p>
+                                                    <p className="text-sm text-gray-500">
+                                                        {format(new Date(transaction.booking.date), 'dd MMM', { locale: localeId })} •{' '}
+                                                        {transaction.booking.startTime}-{transaction.booking.endTime}
+                                                    </p>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>{transaction.booking.field.name}</TableCell>
+                                            <TableCell>
+                                                {PAYMENT_METHOD_LABELS[transaction.paymentMethod]}
+                                            </TableCell>
+                                            <TableCell className="font-medium text-emerald-600 dark:text-emerald-400">
+                                                {formatCurrency(transaction.amount)}
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge className={PAYMENT_STATUS_COLORS[transaction.paymentStatus]}>
+                                                    {PAYMENT_STATUS_LABELS[transaction.paymentStatus]}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell className="text-right pr-4 sm:pr-6">
+                                                {transaction.paymentStatus === 'UNPAID' && (
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        onClick={() => handleMarkAsPaid(transaction.id)}
+                                                        disabled={markingPaidId === transaction.id}
+                                                        className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                                                    >
+                                                        {markingPaidId === transaction.id ? (
+                                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                                        ) : (
+                                                            <>
+                                                                <Check className="w-4 h-4 mr-1" />
+                                                                Lunas
+                                                            </>
+                                                        )}
+                                                    </Button>
+                                                )}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
                     </CardContent>
                 </Card>
             )}
