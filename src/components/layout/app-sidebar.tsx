@@ -11,6 +11,7 @@ import {
     CreditCard,
     Receipt,
     BarChart3,
+    Settings,
     LogOut,
     Menu,
     X,
@@ -26,6 +27,7 @@ const iconMap = {
     CreditCard,
     Receipt,
     BarChart3,
+    Settings,
 }
 
 export function AppSidebar() {

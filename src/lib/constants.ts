@@ -122,6 +122,11 @@ export const NAV_ITEMS = [
         href: '/dashboard/reports',
         icon: 'BarChart3',
     },
+    {
+        title: 'Pengaturan',
+        href: '/dashboard/settings/timeslots',
+        icon: 'Settings',
+    },
 ] as const
 
 // Session cookie name

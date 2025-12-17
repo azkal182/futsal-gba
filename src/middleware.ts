@@ -2,18 +2,28 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { SESSION_COOKIE_NAME } from '@/lib/constants'
 
-// Routes that don't require authentication
-const publicRoutes = ['/login', '/']
+// Public routes that don't require authentication
+const publicRoutes = [
+    '/',           // Public homepage
+    '/login',      // Login page
+    '/book',       // Public booking form
+    '/schedule',   // Public schedule view
+    '/confirmation', // Booking confirmation
+]
 
-// Routes that require specific roles
-const ownerOnlyRoutes = ['/dashboard/reports']
+// Check if pathname starts with any of the public routes
+function isPublicRoute(pathname: string): boolean {
+    return publicRoutes.some(route =>
+        pathname === route || pathname.startsWith(`${route}/`)
+    )
+}
 
 export function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl
     const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME)
 
-    // Allow public routes
-    if (publicRoutes.includes(pathname)) {
+    // Allow public routes without authentication
+    if (isPublicRoute(pathname)) {
         // If logged in and trying to access login page, redirect to dashboard
         if (sessionCookie && pathname === '/login') {
             return NextResponse.redirect(new URL('/dashboard', request.url))
@@ -28,11 +38,6 @@ export function middleware(request: NextRequest) {
             loginUrl.searchParams.set('callbackUrl', pathname)
             return NextResponse.redirect(loginUrl)
         }
-
-        // Check role for owner-only routes (basic check, full validation in server components)
-        // Note: For proper role checking, decode the session token
-        // This is a simplified check; full validation happens server-side
-
         return NextResponse.next()
     }
 
@@ -46,7 +51,7 @@ export const config = {
          * - _next/static (static files)
          * - _next/image (image optimization files)
          * - favicon.ico (favicon file)
-         * - public folder
+         * - public folder files
          * - api routes
          */
         '/((?!_next/static|_next/image|favicon.ico|.*\\..*|api).*)',

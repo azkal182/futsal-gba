@@ -118,3 +118,16 @@ model Expense {
   @@index([date])
   @@map("expenses")
 }
+
+model TimeSlot {
+  id        String   @id @default(cuid())
+  name      String   // e.g., "Pagi", "Siang", "Sore"
+  startTime String   // Format: "HH:MM" (e.g., "06:00")
+  endTime   String   // Format: "HH:MM" (e.g., "10:00")
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0) // For ordering categories
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("time_slots")
+}

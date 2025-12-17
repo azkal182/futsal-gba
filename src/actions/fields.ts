@@ -21,6 +21,16 @@ export async function getFields(): Promise<Field[]> {
     })
 }
 
+/**
+ * Get active fields for public display (no auth required)
+ */
+export async function getPublicFields(): Promise<Field[]> {
+    return prisma.field.findMany({
+        where: { isActive: true },
+        orderBy: { name: 'asc' },
+    })
+}
+
 export async function getActiveFields(): Promise<Field[]> {
     await requireAuth()
 

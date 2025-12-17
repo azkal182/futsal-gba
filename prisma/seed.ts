@@ -19,6 +19,7 @@ async function main() {
     await prisma.transaction.deleteMany()
     await prisma.booking.deleteMany()
     await prisma.field.deleteMany()
+    await prisma.timeSlot.deleteMany()
     await prisma.user.deleteMany()
 
     // Create users
@@ -45,6 +46,40 @@ async function main() {
 
     console.log(`  ✅ Created owner: ${owner.email}`)
     console.log(`  ✅ Created admin: ${admin.email}`)
+
+    // Create time slots (categories)
+    console.log('⏰ Creating time slot categories...')
+    const timeSlots = await Promise.all([
+        prisma.timeSlot.create({
+            data: {
+                name: 'Pagi',
+                startTime: '06:00',
+                endTime: '10:00',
+                sortOrder: 1,
+                isActive: true,
+            },
+        }),
+        prisma.timeSlot.create({
+            data: {
+                name: 'Siang',
+                startTime: '10:00',
+                endTime: '15:00',
+                sortOrder: 2,
+                isActive: true,
+            },
+        }),
+        prisma.timeSlot.create({
+            data: {
+                name: 'Sore',
+                startTime: '15:00',
+                endTime: '22:00',
+                sortOrder: 3,
+                isActive: true,
+            },
+        }),
+    ])
+
+    timeSlots.forEach((ts) => console.log(`  ✅ Created time slot: ${ts.name} (${ts.startTime} - ${ts.endTime})`))
 
     // Create fields
     console.log('🏟️ Creating fields...')

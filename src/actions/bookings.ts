@@ -334,3 +334,160 @@ export async function getBookingStats() {
         confirmedBookings: confirmedCount,
     }
 }
+
+// ==================== PUBLIC BOOKING FUNCTIONS ====================
+
+/**
+ * Get booked slots for a field on a specific date (public - no auth required)
+ */
+export async function getBookedSlots(fieldId: string, date: Date): Promise<string[]> {
+    const bookings = await prisma.booking.findMany({
+        where: {
+            fieldId,
+            date: {
+                gte: startOfDay(date),
+                lte: endOfDay(date),
+            },
+            status: {
+                in: ['PENDING', 'CONFIRMED'],
+            },
+        },
+        select: { startTime: true, endTime: true },
+    })
+
+    const bookedSlots: string[] = []
+
+    for (const booking of bookings) {
+        const [startHour] = booking.startTime.split(':').map(Number)
+        const [endHour] = booking.endTime.split(':').map(Number)
+
+        for (let hour = startHour; hour < endHour; hour++) {
+            bookedSlots.push(`${hour.toString().padStart(2, '0')}:00`)
+        }
+    }
+
+    return bookedSlots
+}
+
+/**
+ * Create a public booking (no auth required)
+ */
+export async function createPublicBooking(
+    _prevState: ActionResult<BookingFull> | null,
+    formData: FormData
+): Promise<ActionResult<BookingFull>> {
+    try {
+        const rawData = {
+            fieldId: formData.get('fieldId') as string,
+            customerName: formData.get('customerName') as string,
+            customerPhone: (formData.get('customerPhone') as string) || undefined,
+            date: new Date(formData.get('date') as string),
+            startTime: formData.get('startTime') as string,
+            endTime: formData.get('endTime') as string,
+            notes: (formData.get('notes') as string) || undefined,
+        }
+
+        const validatedFields = bookingSchema.safeParse(rawData)
+
+        if (!validatedFields.success) {
+            return {
+                success: false,
+                error: validatedFields.error.issues[0]?.message ?? 'Data tidak valid',
+            }
+        }
+
+        const { fieldId, customerName, customerPhone, date, startTime, endTime, notes } = validatedFields.data
+
+        // Get field for price calculation
+        const field = await prisma.field.findUnique({
+            where: { id: fieldId },
+        })
+
+        if (!field) {
+            return { success: false, error: 'Lapangan tidak ditemukan' }
+        }
+
+        if (!field.isActive) {
+            return { success: false, error: 'Lapangan tidak aktif' }
+        }
+
+        // Calculate duration and price
+        const duration = calculateDuration(startTime, endTime)
+
+        if (duration <= 0) {
+            return { success: false, error: 'Waktu selesai harus lebih besar dari waktu mulai' }
+        }
+
+        const totalPrice = field.pricePerHour * duration
+
+        // Use transaction to prevent race conditions (double booking)
+        const booking = await prisma.$transaction(async (tx) => {
+            // Check for overlapping bookings
+            const existingBooking = await tx.booking.findFirst({
+                where: {
+                    fieldId,
+                    date: {
+                        gte: startOfDay(date),
+                        lte: endOfDay(date),
+                    },
+                    status: {
+                        in: ['PENDING', 'CONFIRMED'],
+                    },
+                    OR: [
+                        // New booking starts during existing booking
+                        {
+                            startTime: { lte: startTime },
+                            endTime: { gt: startTime },
+                        },
+                        // New booking ends during existing booking
+                        {
+                            startTime: { lt: endTime },
+                            endTime: { gte: endTime },
+                        },
+                        // New booking contains existing booking
+                        {
+                            startTime: { gte: startTime },
+                            endTime: { lte: endTime },
+                        },
+                    ],
+                },
+            })
+
+            if (existingBooking) {
+                throw new Error('Maaf, slot waktu yang dipilih sudah tidak tersedia. Silakan pilih waktu lain.')
+            }
+
+            // Create booking
+            return tx.booking.create({
+                data: {
+                    fieldId,
+                    customerName,
+                    customerPhone,
+                    date: startOfDay(date),
+                    startTime,
+                    endTime,
+                    duration,
+                    totalPrice,
+                    notes,
+                    status: 'PENDING',
+                },
+                include: {
+                    field: true,
+                    transaction: true,
+                },
+            })
+        })
+
+        revalidatePath('/dashboard/bookings')
+        revalidatePath('/dashboard')
+        revalidatePath('/schedule')
+
+        return { success: true, data: booking }
+    } catch (error) {
+        console.error('Error creating public booking:', error)
+        if (error instanceof Error) {
+            return { success: false, error: error.message }
+        }
+        return { success: false, error: 'Gagal membuat booking. Silakan coba lagi.' }
+    }
+}
