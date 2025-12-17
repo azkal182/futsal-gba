@@ -1,0 +1,120 @@
+// Prisma schema for Futsal Booking Management System
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ==================== ENUMS ====================
+
+enum Role {
+  ADMIN
+  OWNER
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+}
+
+enum PaymentMethod {
+  CASH
+  TRANSFER
+  EWALLET
+}
+
+// ==================== MODELS ====================
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      Role     @default(ADMIN)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+model Field {
+  id           String    @id @default(cuid())
+  name         String
+  description  String?
+  pricePerHour Int       // In IDR (e.g., 100000 = Rp 100.000)
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  bookings Booking[]
+
+  @@map("fields")
+}
+
+model Booking {
+  id            String        @id @default(cuid())
+  fieldId       String
+  field         Field         @relation(fields: [fieldId], references: [id])
+  customerName  String
+  customerPhone String?
+  date          DateTime      @db.Date
+  startTime     String        // Format: "HH:MM" (e.g., "08:00")
+  endTime       String        // Format: "HH:MM" (e.g., "10:00")
+  duration      Int           // In hours
+  totalPrice    Int           // Calculated at booking creation
+  status        BookingStatus @default(PENDING)
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  transaction Transaction?
+
+  // Prevent double booking: unique constraint on field + date + time
+  @@unique([fieldId, date, startTime])
+  @@index([date])
+  @@index([status])
+  @@index([fieldId])
+  @@map("bookings")
+}
+
+model Transaction {
+  id            String        @id @default(cuid())
+  bookingId     String        @unique
+  booking       Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  amount        Int
+  paymentMethod PaymentMethod
+  paymentStatus PaymentStatus @default(UNPAID)
+  proofUrl      String?       // Optional payment proof URL
+  paidAt        DateTime?
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([paymentStatus])
+  @@index([paidAt])
+  @@map("transactions")
+}
+
+model Expense {
+  id          String   @id @default(cuid())
+  date        DateTime @db.Date
+  amount      Int
+  description String
+  category    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([date])
+  @@map("expenses")
+}
