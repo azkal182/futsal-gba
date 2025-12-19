@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState, useState } from 'react'
-import { createField, toggleFieldStatus, deleteField } from '@/actions/fields'
+import { createField, updateField, toggleFieldStatus, deleteField } from '@/actions/fields'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -16,7 +16,7 @@ import {
     DialogTitle,
     DialogTrigger,
 } from '@/components/ui/dialog'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Pencil } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Field } from '@/types'
 
@@ -28,32 +28,71 @@ interface FieldFormDialogProps {
 
 export function FieldFormDialog({ field, trigger, onSuccess }: FieldFormDialogProps) {
     const [open, setOpen] = useState(false)
-    const [state, formAction, isPending] = useActionState(createField, null)
+    const [isSubmitting, setIsSubmitting] = useState(false)
+    const [error, setError] = useState<string | null>(null)
+    const [isActive, setIsActive] = useState(field?.isActive ?? true)
+    const isEditMode = !!field
+
+    const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault()
+        setIsSubmitting(true)
+        setError(null)
+
+        const formData = new FormData(e.currentTarget)
+
+        if (isEditMode && field) {
+            // Update existing field
+            const data = {
+                name: formData.get('name') as string,
+                description: (formData.get('description') as string) || undefined,
+                pricePerHour: parseInt(formData.get('pricePerHour') as string, 10),
+                isActive: isActive,
+            }
+
+            const result = await updateField(field.id, data)
+            setIsSubmitting(false)
+
+            if (result.success) {
+                setOpen(false)
+                toast.success('Lapangan berhasil diupdate')
+                onSuccess?.()
+            } else {
+                setError(result.error || 'Gagal mengupdate lapangan')
+            }
+        } else {
+            // Create new field
+            formData.set('isActive', isActive.toString())
+            const result = await createField(null, formData)
+            setIsSubmitting(false)
+
+            if (result.success) {
+                setOpen(false)
+                toast.success('Lapangan berhasil ditambahkan')
+                onSuccess?.()
+            } else {
+                setError(result.error || 'Gagal membuat lapangan')
+            }
+        }
+    }
 
     return (
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog open={open} onOpenChange={(newOpen) => {
+            setOpen(newOpen)
+            if (newOpen && field) {
+                setIsActive(field.isActive)
+            }
+            setError(null)
+        }}>
             <DialogTrigger asChild>{trigger}</DialogTrigger>
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
-                    <DialogTitle>{field ? 'Edit Lapangan' : 'Tambah Lapangan Baru'}</DialogTitle>
+                    <DialogTitle>{isEditMode ? 'Edit Lapangan' : 'Tambah Lapangan Baru'}</DialogTitle>
                     <DialogDescription>
-                        {field ? 'Ubah informasi lapangan' : 'Isi detail lapangan yang ingin ditambahkan'}
+                        {isEditMode ? 'Ubah informasi lapangan' : 'Isi detail lapangan yang ingin ditambahkan'}
                     </DialogDescription>
                 </DialogHeader>
 
-                <form
-                    action={async (formData) => {
-                        const result = await createField(null, formData)
-                        if (result.success) {
-                            setOpen(false)
-                            toast.success('Lapangan berhasil ditambahkan')
-                            onSuccess?.()
-                        } else {
-                            toast.error(result.error)
-                        }
-                    }}
-                    className="space-y-4"
-                >
+                <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="space-y-2">
                         <Label htmlFor="name">Nama Lapangan</Label>
                         <Input
@@ -91,13 +130,16 @@ export function FieldFormDialog({ field, trigger, onSuccess }: FieldFormDialogPr
 
                     <div className="flex items-center justify-between">
                         <Label htmlFor="isActive">Status Aktif</Label>
-                        <input type="hidden" name="isActive" value="true" />
-                        <Switch id="isActive" defaultChecked={field?.isActive ?? true} />
+                        <Switch
+                            id="isActive"
+                            checked={isActive}
+                            onCheckedChange={setIsActive}
+                        />
                     </div>
 
-                    {state?.success === false && (
+                    {error && (
                         <div className="p-3 text-sm text-red-600 bg-red-50 dark:bg-red-900/20 dark:text-red-400 rounded-lg">
-                            {state.error}
+                            {error}
                         </div>
                     )}
 
@@ -107,16 +149,16 @@ export function FieldFormDialog({ field, trigger, onSuccess }: FieldFormDialogPr
                         </Button>
                         <Button
                             type="submit"
-                            disabled={isPending}
+                            disabled={isSubmitting}
                             className="bg-gradient-to-r from-emerald-500 to-teal-600"
                         >
-                            {isPending ? (
+                            {isSubmitting ? (
                                 <>
                                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                                     Menyimpan...
                                 </>
                             ) : (
-                                'Simpan'
+                                isEditMode ? 'Update' : 'Simpan'
                             )}
                         </Button>
                     </DialogFooter>
@@ -165,6 +207,15 @@ export function FieldActions({ field, onUpdate }: FieldActionsProps) {
 
     return (
         <div className="flex items-center gap-2">
+            <FieldFormDialog
+                field={field}
+                trigger={
+                    <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-700 hover:bg-blue-50">
+                        <Pencil className="w-4 h-4" />
+                    </Button>
+                }
+                onSuccess={onUpdate}
+            />
             <Switch
                 checked={field.isActive}
                 onCheckedChange={handleToggle}
