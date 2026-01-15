@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { validateStatusTransition } from '@/services/booking-state-machine'
 import { TIME_SLOTS } from '@/lib/constants'
+import { jakartaDateUtc, combineJakartaDateTime } from '@/lib/jakarta-time'
 import type {
     ActionResult,
     CreateBookingInput,
@@ -13,7 +14,6 @@ import type {
     TimeSlot
 } from '@/types'
 import { z } from 'zod'
-import { startOfDay, endOfDay, format } from 'date-fns'
 
 const bookingSchema = z.object({
     fieldId: z.string().min(1, 'Pilih lapangan'),
@@ -45,10 +45,7 @@ export async function getBookings(filters?: {
     const where: Record<string, unknown> = {}
 
     if (filters?.date) {
-        where.date = {
-            gte: startOfDay(filters.date),
-            lte: endOfDay(filters.date),
-        }
+        where.date = jakartaDateUtc(filters.date)
     }
 
     if (filters?.fieldId) {
@@ -84,14 +81,11 @@ export async function getBooking(id: string): Promise<BookingFull | null> {
 export async function getTodayBookings(): Promise<BookingFull[]> {
     await requireAuth()
 
-    const today = new Date()
+    const todayDate = jakartaDateUtc(new Date())
 
     return prisma.booking.findMany({
         where: {
-            date: {
-                gte: startOfDay(today),
-                lte: endOfDay(today),
-            },
+            date: todayDate,
         },
         include: {
             field: true,
@@ -107,14 +101,13 @@ export async function getAvailableSlots(
 ): Promise<TimeSlot[]> {
     await requireAuth()
 
+    const targetDate = jakartaDateUtc(date)
+
     // Get all bookings for this field on this date
     const bookings = await prisma.booking.findMany({
         where: {
             fieldId,
-            date: {
-                gte: startOfDay(date),
-                lte: endOfDay(date),
-            },
+            date: targetDate,
             status: {
                 in: ['PENDING', 'CONFIRMED'],
             },
@@ -167,6 +160,7 @@ export async function createBooking(
         }
 
         const { fieldId, customerName, customerPhone, date, startTime, endTime, notes } = validatedFields.data
+        const bookingDate = jakartaDateUtc(date)
 
         // Get field for price calculation
         const field = await prisma.field.findUnique({
@@ -196,10 +190,7 @@ export async function createBooking(
             const existingBooking = await tx.booking.findFirst({
                 where: {
                     fieldId,
-                    date: {
-                        gte: startOfDay(date),
-                        lte: endOfDay(date),
-                    },
+                    date: bookingDate,
                     status: {
                         in: ['PENDING', 'CONFIRMED'],
                     },
@@ -233,7 +224,7 @@ export async function createBooking(
                     fieldId,
                     customerName,
                     customerPhone,
-                    date: startOfDay(date),
+                    date: bookingDate,
                     startTime,
                     endTime,
                     duration,
@@ -332,6 +323,7 @@ export async function createConfirmedBooking(
         }
 
         const { fieldId, customerName, customerPhone, date, startTime, endTime, notes } = validatedFields.data
+        const bookingDate = jakartaDateUtc(date)
 
         // Get field for price calculation
         const field = await prisma.field.findUnique({
@@ -361,10 +353,7 @@ export async function createConfirmedBooking(
             const existingBooking = await tx.booking.findFirst({
                 where: {
                     fieldId,
-                    date: {
-                        gte: startOfDay(date),
-                        lte: endOfDay(date),
-                    },
+                    date: bookingDate,
                     status: {
                         in: ['PENDING', 'CONFIRMED'],
                     },
@@ -398,7 +387,7 @@ export async function createConfirmedBooking(
                     fieldId,
                     customerName,
                     customerPhone,
-                    date: startOfDay(date),
+                    date: bookingDate,
                     startTime,
                     endTime,
                     duration,
@@ -456,9 +445,7 @@ export async function cancelBooking(id: string): Promise<ActionResult<BookingFul
         }
 
         // Calculate minimum cancel time (3 hours before booking)
-        const bookingDateTime = new Date(booking.date)
-        const [hour, minute] = booking.startTime.split(':').map(Number)
-        bookingDateTime.setHours(hour, minute, 0, 0)
+        const bookingDateTime = combineJakartaDateTime(booking.date, booking.startTime)
 
         const now = new Date()
         const hoursUntilBooking = (bookingDateTime.getTime() - now.getTime()) / (1000 * 60 * 60)
@@ -512,9 +499,7 @@ export async function canCancelBooking(id: string): Promise<{ canCancel: boolean
     }
 
     // Calculate time until booking
-    const bookingDateTime = new Date(booking.date)
-    const [hour, minute] = booking.startTime.split(':').map(Number)
-    bookingDateTime.setHours(hour, minute, 0, 0)
+    const bookingDateTime = combineJakartaDateTime(booking.date, booking.startTime)
 
     const now = new Date()
     const hoursUntilBooking = (bookingDateTime.getTime() - now.getTime()) / (1000 * 60 * 60)
@@ -529,7 +514,7 @@ export async function canCancelBooking(id: string): Promise<{ canCancel: boolean
 export async function getBookingStats() {
     await requireAuth()
 
-    const today = new Date()
+    const todayDate = jakartaDateUtc(new Date())
 
     const [
         todayBookingsCount,
@@ -538,10 +523,7 @@ export async function getBookingStats() {
     ] = await Promise.all([
         prisma.booking.count({
             where: {
-                date: {
-                    gte: startOfDay(today),
-                    lte: endOfDay(today),
-                },
+                date: todayDate,
             },
         }),
         prisma.booking.count({
@@ -565,13 +547,11 @@ export async function getBookingStats() {
  * Get booked slots for a field on a specific date (public - no auth required)
  */
 export async function getBookedSlots(fieldId: string, date: Date): Promise<string[]> {
+    const targetDate = jakartaDateUtc(date)
     const bookings = await prisma.booking.findMany({
         where: {
             fieldId,
-            date: {
-                gte: startOfDay(date),
-                lte: endOfDay(date),
-            },
+            date: targetDate,
             status: {
                 in: ['PENDING', 'CONFIRMED'],
             },
@@ -603,13 +583,11 @@ export interface SlotDetail {
  * Get booked slots with customer details for schedule view (public)
  */
 export async function getBookedSlotsWithDetails(fieldId: string, date: Date): Promise<SlotDetail[]> {
+    const targetDate = jakartaDateUtc(date)
     const bookings = await prisma.booking.findMany({
         where: {
             fieldId,
-            date: {
-                gte: startOfDay(date),
-                lte: endOfDay(date),
-            },
+            date: targetDate,
             status: {
                 in: ['PENDING', 'CONFIRMED'],
             },
@@ -668,6 +646,7 @@ export async function createPublicBooking(
         }
 
         const { fieldId, customerName, customerPhone, date, startTime, endTime, notes } = validatedFields.data
+        const bookingDate = jakartaDateUtc(date)
 
         // Get field for price calculation
         const field = await prisma.field.findUnique({
@@ -697,10 +676,7 @@ export async function createPublicBooking(
             const existingBooking = await tx.booking.findFirst({
                 where: {
                     fieldId,
-                    date: {
-                        gte: startOfDay(date),
-                        lte: endOfDay(date),
-                    },
+                    date: bookingDate,
                     status: {
                         in: ['PENDING', 'CONFIRMED'],
                     },
@@ -734,7 +710,7 @@ export async function createPublicBooking(
                     fieldId,
                     customerName,
                     customerPhone,
-                    date: startOfDay(date),
+                    date: bookingDate,
                     startTime,
                     endTime,
                     duration,

@@ -1,4 +1,12 @@
-import { startOfDay, endOfDay, startOfMonth, endOfMonth, startOfWeek, endOfWeek } from 'date-fns'
+import {
+    jakartaDateUtc,
+    startOfJakartaWeekDateUtc,
+    endOfJakartaWeekDateUtc,
+    startOfJakartaMonthDateUtc,
+    endOfJakartaMonthDateUtc,
+    startOfJakartaYearDateUtc,
+    endOfJakartaYearDateUtc,
+} from '@/lib/jakarta-time'
 import type { DateRange } from '@/types'
 
 // Preset date ranges
@@ -7,14 +15,17 @@ export function getPresetDateRange(preset: 'today' | 'week' | 'month' | 'year'):
 
     switch (preset) {
         case 'today':
-            return { from: startOfDay(now), to: endOfDay(now) }
+            return { from: jakartaDateUtc(now), to: jakartaDateUtc(now) }
         case 'week':
-            return { from: startOfWeek(now, { weekStartsOn: 1 }), to: endOfWeek(now, { weekStartsOn: 1 }) }
+            return {
+                from: startOfJakartaWeekDateUtc(now, 1),
+                to: endOfJakartaWeekDateUtc(now, 1),
+            }
         case 'month':
-            return { from: startOfMonth(now), to: endOfMonth(now) }
+            return { from: startOfJakartaMonthDateUtc(now), to: endOfJakartaMonthDateUtc(now) }
         case 'year':
-            return { from: new Date(now.getFullYear(), 0, 1), to: new Date(now.getFullYear(), 11, 31) }
+            return { from: startOfJakartaYearDateUtc(now), to: endOfJakartaYearDateUtc(now) }
         default:
-            return { from: startOfMonth(now), to: endOfMonth(now) }
+            return { from: startOfJakartaMonthDateUtc(now), to: endOfJakartaMonthDateUtc(now) }
     }
 }

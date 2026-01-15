@@ -1,9 +1,9 @@
 'use server'
 
 import { prisma } from '@/lib/prisma'
-import { requireAuth, requireRole } from '@/lib/auth'
+import { requireAuth } from '@/lib/auth'
+import { endOfJakartaDayUtc, getJakartaDateKey, jakartaDateUtc, startOfJakartaDayUtc } from '@/lib/jakarta-time'
 import type { FinancialSummary, DateRange } from '@/types'
-import { startOfDay, endOfDay, startOfMonth, endOfMonth, startOfWeek, endOfWeek } from 'date-fns'
 
 export async function getFinancialSummary(dateRange: DateRange): Promise<FinancialSummary> {
     await requireAuth()
@@ -15,8 +15,8 @@ export async function getFinancialSummary(dateRange: DateRange): Promise<Financi
         where: {
             paymentStatus: 'PAID',
             paidAt: {
-                gte: startOfDay(from),
-                lte: endOfDay(to),
+                gte: startOfJakartaDayUtc(from),
+                lte: endOfJakartaDayUtc(to),
             },
         },
         _sum: {
@@ -29,8 +29,8 @@ export async function getFinancialSummary(dateRange: DateRange): Promise<Financi
     const expenseResult = await prisma.expense.aggregate({
         where: {
             date: {
-                gte: startOfDay(from),
-                lte: endOfDay(to),
+                gte: jakartaDateUtc(from),
+                lte: jakartaDateUtc(to),
             },
         },
         _sum: {
@@ -58,8 +58,8 @@ export async function getDailyIncome(dateRange: DateRange): Promise<{ date: stri
         where: {
             paymentStatus: 'PAID',
             paidAt: {
-                gte: startOfDay(from),
-                lte: endOfDay(to),
+                gte: startOfJakartaDayUtc(from),
+                lte: endOfJakartaDayUtc(to),
             },
         },
         select: {
@@ -73,7 +73,7 @@ export async function getDailyIncome(dateRange: DateRange): Promise<{ date: stri
 
     for (const tx of transactions) {
         if (tx.paidAt) {
-            const dateKey = tx.paidAt.toISOString().split('T')[0]
+            const dateKey = getJakartaDateKey(tx.paidAt)
             dailyMap.set(dateKey, (dailyMap.get(dateKey) ?? 0) + tx.amount)
         }
     }
@@ -92,8 +92,8 @@ export async function getIncomeByField(dateRange: DateRange): Promise<{ fieldNam
         where: {
             paymentStatus: 'PAID',
             paidAt: {
-                gte: startOfDay(from),
-                lte: endOfDay(to),
+                gte: startOfJakartaDayUtc(from),
+                lte: endOfJakartaDayUtc(to),
             },
         },
         select: {
@@ -133,8 +133,8 @@ export async function getExpensesByCategory(dateRange: DateRange): Promise<{ cat
     const expenses = await prisma.expense.findMany({
         where: {
             date: {
-                gte: startOfDay(from),
-                lte: endOfDay(to),
+                gte: jakartaDateUtc(from),
+                lte: jakartaDateUtc(to),
             },
         },
         select: {

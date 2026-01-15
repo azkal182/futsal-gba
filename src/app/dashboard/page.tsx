@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { getTodayBookings, getBookingStats } from '@/actions/bookings'
 import { getTodayIncome } from '@/actions/transactions'
 import { formatCurrency, BOOKING_STATUS_LABELS, BOOKING_STATUS_COLORS } from '@/lib/constants'
+import { getJakartaTimeString, jakartaDateUtc } from '@/lib/jakarta-time'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -15,21 +16,16 @@ import {
     Users
 } from 'lucide-react'
 import Link from 'next/link'
-import { startOfDay, endOfDay, format } from 'date-fns'
-import { id as localeId } from 'date-fns/locale'
 
 async function getFieldsStatus() {
-    const today = new Date()
+    const todayDate = jakartaDateUtc(new Date())
 
     const fields = await prisma.field.findMany({
         where: { isActive: true },
         include: {
             bookings: {
                 where: {
-                    date: {
-                        gte: startOfDay(today),
-                        lte: endOfDay(today),
-                    },
+                    date: todayDate,
                     status: {
                         in: ['PENDING', 'CONFIRMED'],
                     },
@@ -44,8 +40,7 @@ async function getFieldsStatus() {
         name: field.name,
         bookingsToday: field.bookings.length,
         isOccupied: field.bookings.some((b) => {
-            const now = new Date()
-            const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`
+            const currentTime = getJakartaTimeString(new Date())
             return b.startTime <= currentTime && b.endTime > currentTime
         }),
     }))
@@ -59,8 +54,13 @@ export default async function DashboardPage() {
         getFieldsStatus(),
     ])
 
-    const today = new Date()
-    const formattedDate = format(today, 'EEEE, d MMMM yyyy', { locale: localeId })
+    const formattedDate = new Intl.DateTimeFormat('id-ID', {
+        timeZone: 'Asia/Jakarta',
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+    }).format(new Date())
 
     return (
         <div className="space-y-8">

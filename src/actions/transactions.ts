@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
+import { startOfJakartaDayUtc, endOfJakartaDayUtc } from '@/lib/jakarta-time'
 import type {
     ActionResult,
     CreateTransactionInput,
@@ -11,7 +12,6 @@ import type {
     PaymentMethod
 } from '@/types'
 import { z } from 'zod'
-import { startOfDay, endOfDay } from 'date-fns'
 
 const transactionSchema = z.object({
     bookingId: z.string().min(1, 'Booking wajib dipilih'),
@@ -36,10 +36,10 @@ export async function getTransactions(filters?: {
     if (filters?.dateFrom || filters?.dateTo) {
         where.createdAt = {}
         if (filters?.dateFrom) {
-            (where.createdAt as Record<string, unknown>).gte = startOfDay(filters.dateFrom)
+            (where.createdAt as Record<string, unknown>).gte = startOfJakartaDayUtc(filters.dateFrom)
         }
         if (filters?.dateTo) {
-            (where.createdAt as Record<string, unknown>).lte = endOfDay(filters.dateTo)
+            (where.createdAt as Record<string, unknown>).lte = endOfJakartaDayUtc(filters.dateTo)
         }
     }
 
@@ -193,8 +193,8 @@ export async function getTodayIncome(): Promise<number> {
         where: {
             paymentStatus: 'PAID',
             paidAt: {
-                gte: startOfDay(today),
-                lte: endOfDay(today),
+                gte: startOfJakartaDayUtc(today),
+                lte: endOfJakartaDayUtc(today),
             },
         },
         _sum: {

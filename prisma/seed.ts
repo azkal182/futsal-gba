@@ -88,7 +88,7 @@ async function main() {
             data: {
                 name: 'Lapangan GBA',
                 description: 'Lapangan utama dengan rumput sintetis premium',
-                pricePerHour: 50000,
+                pricePerHour: 30000,
                 isActive: true,
             },
         }),
@@ -117,83 +117,83 @@ async function main() {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
 
-    const bookings = await Promise.all([
-        prisma.booking.create({
-            data: {
-                fieldId: fields[0].id,
-                customerName: 'Budi Santoso',
-                customerPhone: '081234567890',
-                date: today,
-                startTime: '09:00',
-                endTime: '11:00',
-                duration: 2,
-                totalPrice: 300000,
-                status: 'CONFIRMED',
-            },
-        }),
-        prisma.booking.create({
-            data: {
-                fieldId: fields[0].id,
-                customerName: 'Citra Dewi',
-                customerPhone: '087654321098',
-                date: today,
-                startTime: '17:00',
-                endTime: '19:00',
-                duration: 2,
-                totalPrice: 300000,
-                status: 'CONFIRMED',
-            },
-        }),
-    ])
+    // const bookings = await Promise.all([
+    //     prisma.booking.create({
+    //         data: {
+    //             fieldId: fields[0].id,
+    //             customerName: 'Budi Santoso',
+    //             customerPhone: '081234567890',
+    //             date: today,
+    //             startTime: '09:00',
+    //             endTime: '11:00',
+    //             duration: 2,
+    //             totalPrice: 300000,
+    //             status: 'CONFIRMED',
+    //         },
+    //     }),
+    //     prisma.booking.create({
+    //         data: {
+    //             fieldId: fields[0].id,
+    //             customerName: 'Citra Dewi',
+    //             customerPhone: '087654321098',
+    //             date: today,
+    //             startTime: '17:00',
+    //             endTime: '19:00',
+    //             duration: 2,
+    //             totalPrice: 300000,
+    //             status: 'CONFIRMED',
+    //         },
+    //     }),
+    // ])
 
-    bookings.forEach((b) => console.log(`  ✅ Created booking: ${b.customerName} (${b.startTime}-${b.endTime})`))
+    // bookings.forEach((b) => console.log(`  ✅ Created booking: ${b.customerName} (${b.startTime}-${b.endTime})`))
 
-    // Create transactions for confirmed bookings
-    console.log('💳 Creating transactions...')
-    const transactions = await Promise.all([
-        prisma.transaction.create({
-            data: {
-                bookingId: bookings[0].id,
-                amount: bookings[0].totalPrice,
-                paymentMethod: 'CASH',
-                paymentStatus: 'PAID',
-                paidAt: new Date(),
-            },
-        }),
-    ])
+    // // Create transactions for confirmed bookings
+    // console.log('💳 Creating transactions...')
+    // const transactions = await Promise.all([
+    //     prisma.transaction.create({
+    //         data: {
+    //             bookingId: bookings[0].id,
+    //             amount: bookings[0].totalPrice,
+    //             paymentMethod: 'CASH',
+    //             paymentStatus: 'PAID',
+    //             paidAt: new Date(),
+    //         },
+    //     }),
+    // ])
 
-    transactions.forEach((t) => console.log(`  ✅ Created transaction: Rp ${t.amount.toLocaleString()} (${t.paymentStatus})`))
+    // transactions.forEach((t) => console.log(`  ✅ Created transaction: Rp ${t.amount.toLocaleString()} (${t.paymentStatus})`))
 
-    // Create sample expenses
-    console.log('📝 Creating sample expenses...')
-    const expenses = await Promise.all([
-        prisma.expense.create({
-            data: {
-                date: today,
-                amount: 500000,
-                description: 'Pembayaran listrik bulanan',
-                category: 'Utilitas',
-            },
-        }),
-        prisma.expense.create({
-            data: {
-                date: today,
-                amount: 150000,
-                description: 'Beli air minum untuk tamu',
-                category: 'Operasional',
-            },
-        }),
-        prisma.expense.create({
-            data: {
-                date: today,
-                amount: 300000,
-                description: 'Perawatan rumput sintetis',
-                category: 'Perawatan',
-            },
-        }),
-    ])
+    // // Create sample expenses
+    // console.log('📝 Creating sample expenses...')
+    // const expenses = await Promise.all([
+    //     prisma.expense.create({
+    //         data: {
+    //             date: today,
+    //             amount: 500000,
+    //             description: 'Pembayaran listrik bulanan',
+    //             category: 'Utilitas',
+    //         },
+    //     }),
+    //     prisma.expense.create({
+    //         data: {
+    //             date: today,
+    //             amount: 150000,
+    //             description: 'Beli air minum untuk tamu',
+    //             category: 'Operasional',
+    //         },
+    //     }),
+    //     prisma.expense.create({
+    //         data: {
+    //             date: today,
+    //             amount: 300000,
+    //             description: 'Perawatan rumput sintetis',
+    //             category: 'Perawatan',
+    //         },
+    //     }),
+    // ])
 
-    expenses.forEach((e) => console.log(`  ✅ Created expense: ${e.description} - Rp ${e.amount.toLocaleString()}`))
+    // expenses.forEach((e) => console.log(`  ✅ Created expense: ${e.description} - Rp ${e.amount.toLocaleString()}`))
 
     console.log('')
     console.log('✨ Seed completed successfully!')

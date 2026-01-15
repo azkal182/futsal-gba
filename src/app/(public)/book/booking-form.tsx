@@ -214,7 +214,7 @@ export function PublicBookingForm({ fields, timeSlots, preselectedFieldId }: Pub
                         <CardDescription>Pilih tanggal bermain</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <input type="hidden" name="date" value={selectedDate?.toISOString() || ''} />
+                        <input type="hidden" name="date" value={selectedDate ? format(selectedDate, 'yyyy-MM-dd') : ''} />
                         <Popover>
                             <PopoverTrigger asChild>
                                 <Button

@@ -3,9 +3,9 @@
 import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
+import { jakartaDateUtc } from '@/lib/jakarta-time'
 import type { ActionResult, Expense, CreateExpenseInput } from '@/types'
 import { z } from 'zod'
-import { startOfDay, endOfDay } from 'date-fns'
 
 const expenseSchema = z.object({
     date: z.date(),
@@ -26,10 +26,10 @@ export async function getExpenses(filters?: {
     if (filters?.dateFrom || filters?.dateTo) {
         where.date = {}
         if (filters?.dateFrom) {
-            (where.date as Record<string, unknown>).gte = startOfDay(filters.dateFrom)
+            (where.date as Record<string, unknown>).gte = jakartaDateUtc(filters.dateFrom)
         }
         if (filters?.dateTo) {
-            (where.date as Record<string, unknown>).lte = endOfDay(filters.dateTo)
+            (where.date as Record<string, unknown>).lte = jakartaDateUtc(filters.dateTo)
         }
     }
 
@@ -77,7 +77,7 @@ export async function createExpense(
         const expense = await prisma.expense.create({
             data: {
                 ...validatedFields.data,
-                date: startOfDay(validatedFields.data.date),
+                date: jakartaDateUtc(validatedFields.data.date),
             },
         })
 
@@ -101,7 +101,7 @@ export async function updateExpense(
 
         const updateData: Record<string, unknown> = { ...data }
         if (data.date) {
-            updateData.date = startOfDay(data.date)
+            updateData.date = jakartaDateUtc(data.date)
         }
 
         const expense = await prisma.expense.update({
@@ -157,8 +157,8 @@ export async function getTotalExpenses(dateFrom: Date, dateTo: Date): Promise<nu
     const result = await prisma.expense.aggregate({
         where: {
             date: {
-                gte: startOfDay(dateFrom),
-                lte: endOfDay(dateTo),
+                gte: jakartaDateUtc(dateFrom),
+                lte: jakartaDateUtc(dateTo),
             },
         },
         _sum: {

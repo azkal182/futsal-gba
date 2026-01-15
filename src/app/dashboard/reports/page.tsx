@@ -1,7 +1,6 @@
 import { getFinancialSummary, getIncomeByField, getExpensesByCategory } from '@/actions/reports'
 import { getPresetDateRange } from '@/lib/date-utils'
 import { ReportsClient } from './reports-client'
-import { startOfMonth, endOfMonth } from 'date-fns'
 
 export default async function ReportsPage() {
     // Default to current month
