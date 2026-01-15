@@ -6,6 +6,7 @@ import { requireAuth } from '@/lib/auth'
 import { validateStatusTransition } from '@/services/booking-state-machine'
 import { TIME_SLOTS } from '@/lib/constants'
 import { jakartaDateUtc, combineJakartaDateTime } from '@/lib/jakarta-time'
+import { notifyNewBooking } from '@/lib/telegram'
 import type {
     ActionResult,
     CreateBookingInput,
@@ -242,6 +243,8 @@ export async function createBooking(
         revalidatePath('/dashboard/bookings')
         revalidatePath('/dashboard')
 
+        await notifyNewBooking(booking, { source: 'Dashboard' })
+
         return { success: true, data: booking }
     } catch (error) {
         console.error('Error creating booking:', error)
@@ -405,6 +408,8 @@ export async function createConfirmedBooking(
         revalidatePath('/dashboard/bookings')
         revalidatePath('/dashboard')
         revalidatePath('/schedule')
+
+        await notifyNewBooking(booking, { source: 'Dashboard (Auto Confirm)' })
 
         return { success: true, data: booking }
     } catch (error) {
@@ -728,6 +733,8 @@ export async function createPublicBooking(
         revalidatePath('/dashboard/bookings')
         revalidatePath('/dashboard')
         revalidatePath('/schedule')
+
+        await notifyNewBooking(booking, { source: 'Public' })
 
         return { success: true, data: booking }
     } catch (error) {
